@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupDuplicates, hostOf, isSameBookmark, normalizeUrl } from '../src/index.js';
+import { groupDuplicates, hostOf, isImportableUrl, isSameBookmark, normalizeUrl } from '../src/index.js';
 
 describe('normalizeUrl', () => {
   it('lowercases scheme and host, keeps path case', () => {
@@ -57,5 +57,15 @@ describe('duplicates', () => {
     expect(groups[0]!.keep.title).toBe('A2');
     expect(groups[0]!.duplicates.map((d) => d.title).sort()).toEqual(['', 'A']);
     expect(groups[1]!.duplicates).toEqual([]);
+  });
+});
+
+describe('isImportableUrl', () => {
+  it('accepts web and other plain schemes', () => {
+    for (const u of ['https://a.com', 'http://a.com/x', 'ftp://f.example/a', 'file:///Users/me/a.pdf', 'chrome://settings']) expect(isImportableUrl(u)).toBe(true);
+  });
+  it('rejects code-running / internal / schemeless links', () => {
+    for (const u of ['javascript:alert(1)', ' JavaScript:void(0)', 'vbscript:msgbox', 'data:text/html,<script>x</script>', 'place:sort=8', 'example.com', ''])
+      expect(isImportableUrl(u)).toBe(false);
   });
 });

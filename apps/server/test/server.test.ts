@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setLlmOverride } from '../src/categorize.js';
+import { app } from '../src/index.js';
+import { IMPORT_MAX_BYTES } from '../src/importer.js';
 import { setup, SimDevice } from './helpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -320,5 +322,46 @@ describe('import + categorize + suggestions', () => {
   it('device mapping copy is kept on server', async () => {
     const r = await t.call('GET', '/sync/mappings', { token: A.token });
     expect(r.json.mappings.find((m: any) => m.browserId === 'a1')).toBeTruthy();
+  });
+});
+
+describe('hardening', () => {
+  it('import drops javascript:/data:/vbscript: links from any source and reports them', async () => {
+    const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p>
+      <DT><A HREF="javascript:alert(document.cookie)">evil</A>
+      <DT><A HREF="data:text/html;base64,PHNjcmlwdD4=">evil2</A>
+      <DT><A HREF="https://safe.example/ok">ok</A></DL>`;
+    const r = await t.call('POST', '/import', { token: A.token, raw: html });
+    expect(r.status).toBe(200);
+    expect(r.json, JSON.stringify(r.json)).toMatchObject({ skippedUnsafe: 2, created: 1 });
+    const items = await t.call('POST', '/import', { token: A.token, body: { items: [{ url: 'vbscript:x', title: 'v' }, { url: 'JAVASCRIPT:1', title: 'j' }] } });
+    expect(items.json).toMatchObject({ received: 2, skippedUnsafe: 2, created: 0 });
+    await A.pull();
+    expect(A.live().some((n) => /^(javascript|data|vbscript):/i.test(n.url ?? ''))).toBe(false);
+  });
+
+  it('import rejects bodies over the size cap with 413', async () => {
+    const big = 'x'.repeat(IMPORT_MAX_BYTES + 1);
+    const r = await t.call('POST', '/import', { token: A.token, raw: big });
+    expect(r.status).toBe(413);
+    expect(r.json).toMatchObject({ error: 'too_large', maxBytes: IMPORT_MAX_BYTES });
+  });
+
+  it('500 responses do not leak internal error text', async () => {
+    const secret = 'SQLITE_ERROR: no such column: token_hash_secret_detail';
+    const brokenDb = { prepare() { throw new Error(secret); } } as unknown as D1Database;
+    const orig = console.error;
+    console.error = () => {};
+    try {
+      const res = await app.fetch(new Request('http://local/me', { headers: { authorization: `Bearer ${A.token}` } }), { DB: brokenDb, ADMIN_TOKEN: 'x' }, {
+        waitUntil() {}, passThroughOnException() {}, props: {},
+      } as unknown as ExecutionContext);
+      expect(res.status).toBe(500);
+      const text = await res.text();
+      expect(text).not.toContain('SQLITE');
+      expect(JSON.parse(text)).toMatchObject({ error: 'internal', ref: expect.any(String) });
+    } finally {
+      console.error = orig;
+    }
   });
 });

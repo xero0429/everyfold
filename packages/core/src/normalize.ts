@@ -56,6 +56,16 @@ export function normalizeUrl(raw: string): string {
 }
 
 /** 분류·학습에 쓰는 호스트(소문자, 앞의 www. 제거). URL 이 아니면 null. */
+/**
+ * 가져오기(남의 내보내기 파일·첫 연결 업로드)로 받아도 되는 URL 인가.
+ * 스킴이 있어야 하고, 열면 코드가 도는 javascript:/vbscript:/data: 와 Firefox 내부 place: 는 받지 않는다.
+ * (기기가 직접 동기화하는 sync/push 는 사용자 자신의 북마크라 북마클릿도 그대로 둔다 — 여기서 막지 않는다.)
+ */
+export function isImportableUrl(raw: string): boolean {
+  const u = raw.trim();
+  return /^[a-z][a-z0-9+.-]*:/i.test(u) && !/^(javascript|vbscript|data|place):/i.test(u);
+}
+
 export function hostOf(raw: string): string | null {
   try {
     const u = new URL(raw.trim());

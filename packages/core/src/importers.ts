@@ -1,3 +1,4 @@
+import { isImportableUrl } from './normalize.js';
 import { decodeEntities, flattenBookmarks, parseNetscapeHtml, type FlatBookmark } from './netscape.js';
 
 /**
@@ -60,7 +61,7 @@ export function parseXbel(xml: string): ImportParse {
     } else if (tag === 'bookmark' && !close) {
       const href = attr(attrs, 'href');
       const added = attr(attrs, 'added');
-      if (!href || !/^[a-z][a-z0-9+.-]*:/i.test(href) || /^(javascript|place|data):/i.test(href)) {
+      if (!href || !isImportableUrl(href)) {
         skipped++;
         cur = null;
       } else {
@@ -199,7 +200,7 @@ export function parseRaindropCsv(text: string): ImportParse {
   let skipped = 0;
   for (const r of rows) {
     const url = (r[iu] ?? '').trim();
-    if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+    if (!isImportableUrl(url)) {
       skipped++;
       continue;
     }

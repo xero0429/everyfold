@@ -71,10 +71,10 @@ $<HTMLInputElement>('importFile').addEventListener('change', async (ev) => {
   const f = (ev.target as HTMLInputElement).files?.[0];
   if (!f) return;
   $('importResult').textContent = 'Importing…';
-  const r = await send<{ error?: string; received?: number; created?: number; mergedExisting?: number; mergedInFile?: number }>({ type: 'importFile', text: await f.text() });
+  const r = await send<{ error?: string; received?: number; created?: number; mergedExisting?: number; mergedInFile?: number; skippedUnsafe?: number }>({ type: 'importFile', text: await f.text() });
   $('importResult').textContent = r.error
     ? `Import failed: ${r.error}`
-    : `Imported ${r.received}: ${r.created} added, ${(r.mergedExisting ?? 0) + (r.mergedInFile ?? 0)} duplicates merged`;
+    : `Imported ${r.received}: ${r.created} added, ${(r.mergedExisting ?? 0) + (r.mergedInFile ?? 0)} duplicates merged${r.skippedUnsafe ? `, ${r.skippedUnsafe} skipped (unsupported link type)` : ''}`;
   await loadSuggestions();
 });
 $('syncNow').onclick = () => void act({ type: 'sync' });

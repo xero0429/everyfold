@@ -6,7 +6,7 @@ import { newDeviceToken, requireAdmin, requireDevice, sha256Hex } from './auth.j
 import { Store } from './store.js';
 import { MassDeleteBlocked, pull, push } from './sync.js';
 import { ensureSeeded } from './categorize.js';
-import { importItems, UnknownFormatError } from './importer.js';
+import { IMPORT_MAX_BYTES, importItems, UnknownFormatError } from './importer.js';
 import { createSnapshot, ensureDailySnapshot, listChanges, listSnapshots, restoreSnapshot, undoBatch } from './history.js';
 import { decideSuggestion, generateSuggestions, listSuggestions } from './suggestions.js';
 
@@ -74,8 +74,12 @@ api.get('/sync/mappings', async (c) => {
 
 api.post('/import', async (c) => {
   const ct = c.req.header('content-type') ?? '';
+  const declared = Number(c.req.header('content-length') ?? '0');
+  if (declared > IMPORT_MAX_BYTES) return c.json({ error: 'too_large', maxBytes: IMPORT_MAX_BYTES }, 413);
   // JSON 본문 { items } | { html } | { file, format? } — 아니면 본문 전체를 내보내기 파일로 보고 형식을 알아낸다
   const raw = await c.req.text();
+  // Content-Length 가 없거나(청크 전송) 거짓이어도 실제 길이로 한 번 더 막는다
+  if (new TextEncoder().encode(raw).byteLength > IMPORT_MAX_BYTES) return c.json({ error: 'too_large', maxBytes: IMPORT_MAX_BYTES }, 413);
   let body: Parameters<typeof importItems>[3] | null = null;
   if (ct.includes('application/json')) {
     try {
@@ -145,8 +149,10 @@ api.get('/conflicts', async (c) => {
 app.route('/', api);
 
 app.onError((err, c) => {
-  console.error(err);
-  return c.json({ error: 'internal', message: err.message }, 500);
+  // 내부 오류 문구(D1 SQL·스키마 등)는 로그에만 — 클라이언트엔 일반 문구와 로그를 찾을 id 만
+  const ref = crypto.randomUUID();
+  console.error(`[${ref}]`, err);
+  return c.json({ error: 'internal', ref }, 500);
 });
 
 export default {

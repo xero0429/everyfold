@@ -1,4 +1,4 @@
-import { flattenBookmarks, groupDuplicates, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
+import { flattenBookmarks, groupDuplicates, isImportableUrl, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
 import { Store, type NodeState } from './store.js';
 import { addNewCategorySuggestion, classifyWithContext } from './categorize.js';
 import type { Env } from './env.js';
@@ -16,6 +16,8 @@ export interface ImportResult {
   created: number;
   mergedExisting: number;
   mergedInFile: number;
+  /** 스킴이 없거나 위험한(javascript:/data: 등) URL 이라 건너뛴 수 */
+  skippedUnsafe: number;
   byCategory: Record<string, number>;
   suggestions: string[];
   llmUsed: boolean;
@@ -27,6 +29,9 @@ export interface ImportResult {
  * 1) 파일 안 중복 합치기 2) 서버에 이미 있는 것 합치기 3) 나머지 분류 → 카테고리 폴더에 생성.
  * 모든 생성은 한 batchId 로 묶여 /changes/undo 로 통째 되돌릴 수 있다.
  */
+/** /import 본문 상한 — Workers 메모리(128MB) 안에서 파싱·분류까지 버티는 크기. 큰 라이브러리도 수십만 개 북마크가 이 안에 든다. */
+export const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
+
 export class UnknownFormatError extends Error {}
 
 export async function importItems(
@@ -42,6 +47,9 @@ export async function importItems(
   }
   if (Array.isArray(input.items)) items = items.concat(input.items.filter((i) => i && typeof i.url === 'string'));
   const received = items.length;
+  const safe = items.filter((i) => isImportableUrl(i.url));
+  const skippedUnsafe = received - safe.length;
+  items = safe;
 
   const groups = groupDuplicates(items.map((i) => ({ ...i, title: i.title ?? '' })));
   const mergedInFile = groups.reduce((n, g) => n + g.duplicates.length, 0);
@@ -49,7 +57,7 @@ export async function importItems(
   const existing = new Set(
     (await store.db.prepare(`SELECT norm_url FROM nodes WHERE kind='bookmark' AND deleted=0`).all<{ norm_url: string }>()).results.map((r) => r.norm_url),
   );
-  const fresh = groups.filter((g) => !existing.has(g.key) && /^[a-z][a-z0-9+.-]*:/i.test(g.keep.url));
+  const fresh = groups.filter((g) => !existing.has(g.key));
   const mergedExisting = groups.length - fresh.length;
 
   const { results, inboxId, llmUsed, llmError } = await classifyWithContext(
@@ -81,5 +89,5 @@ export async function importItems(
   await store.writeMany(writes, deviceId, batchId);
   const suggestions: string[] = [];
   for (const [name, ids] of pendingSuggest) suggestions.push(await addNewCategorySuggestion(store, name, ids));
-  return { batchId, received, created: writes.length, mergedExisting, mergedInFile, byCategory, suggestions, llmUsed, ...(llmError ? { llmError } : {}) };
+  return { batchId, received, created: writes.length, mergedExisting, mergedInFile, skippedUnsafe, byCategory, suggestions, llmUsed, ...(llmError ? { llmError } : {}) };
 }
