@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
-    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "dev": "wrangler d1 migrations apply DB --local -c ../../wrangler.toml && wrangler dev -c ../../wrangler.toml",
+    "deploy": "wrangler d1 migrations apply DB --remote -c ../../wrangler.toml && wrangler deploy -c ../../wrangler.toml",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

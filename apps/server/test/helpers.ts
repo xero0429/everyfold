@@ -7,7 +7,7 @@ import type { Env } from '../src/env.js';
 /** miniflare 로컬 D1(workerd SQLite) 위에 마이그레이션을 적용하고, Worker 앱을 그 DB 로 직접 호출한다. */
 export async function setup() {
   // wrangler 의 getPlatformProxy = miniflare(workerd) 로컬 D1. persist:false → 테스트마다 빈 메모리 DB.
-  const proxy = await getPlatformProxy<{ DB: D1Database }>({ configPath: fileURLToPath(new URL('../wrangler.toml', import.meta.url)), persist: false });
+  const proxy = await getPlatformProxy<{ DB: D1Database }>({ configPath: fileURLToPath(new URL('../../../wrangler.toml', import.meta.url)), persist: false });
   const DB = proxy.env.DB;
   const dir = fileURLToPath(new URL('../migrations/', import.meta.url));
   for (const f of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {

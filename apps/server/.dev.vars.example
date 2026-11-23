@@ -1,4 +1,0 @@
-# Admin token used once per device to register it (pick a long random string).
-ADMIN_TOKEN=
-# Optional. Enables LLM categorization (claude-haiku-5-5). Without it, rule-based categorization only.
-ANTHROPIC_API_KEY=

@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local `pnpm dev`. In production set these with `wrangler secret put <NAME>`.
+# Admin token: used once per browser to register it as a device. Pick a long random string.
+ADMIN_TOKEN=change-me-to-a-long-random-string
+# Optional: enables LLM categorizing (Claude Haiku). Without it, rules + learned categories are used.
+ANTHROPIC_API_KEY=

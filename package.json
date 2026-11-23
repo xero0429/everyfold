@@ -6,10 +6,23 @@
   "scripts": {
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "build": "pnpm -r build"
+    "build:extension": "pnpm --filter @everyfold/extension build",
+    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "4.166.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "ADMIN_TOKEN": {
+        "description": "Token you paste into the extension once per browser to register it. Use a long random string, e.g. `openssl rand -hex 32`."
+      },
+      "ANTHROPIC_API_KEY": {
+        "description": "Optional. Enables LLM categorizing with Claude Haiku. Leave empty to use rules + learned categories only."
+      }
+    }
   }
 }
