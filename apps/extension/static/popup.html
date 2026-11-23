@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Everyfold</title>
+<style>
+  body { font: 13px system-ui, sans-serif; width: 320px; margin: 12px; color: #111; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  label { display: block; margin: 6px 0 2px; color: #555; }
+  input, select { width: 100%; box-sizing: border-box; padding: 4px; }
+  button { margin-top: 8px; }
+  #error { color: #b91c1c; min-height: 1em; }
+  #mass { background: #fef3c7; padding: 8px; border-radius: 6px; margin-top: 8px; }
+  ul { padding-left: 16px; } li button { margin: 2px 4px 0 0; }
+  .muted { color: #666; }
+</style>
+</head>
+<body>
+<h1>Everyfold</h1>
+<form id="connectForm">
+  <div id="connect">
+    <label for="serverUrl">Server URL</label><input id="serverUrl" placeholder="https://everyfold.&lt;you&gt;.workers.dev" required />
+    <label for="tokenKind">Token type</label>
+    <select id="tokenKind"><option value="admin">Admin token (registers this browser)</option><option value="device">Device token</option></select>
+    <label for="token">Token</label><input id="token" type="password" required />
+    <label for="deviceName">Device name</label><input id="deviceName" placeholder="Work laptop · Chrome" />
+    <button type="submit" id="connectBtn">Connect</button>
+  </div>
+</form>
+<div id="main" hidden>
+  <div class="muted"><span id="device"></span> → <span id="server"></span></div>
+  <div>Last sync: <span id="last"></span></div>
+  <div class="muted" id="import"></div>
+  <button id="syncNow">Sync now</button>
+  <div id="mass" hidden>
+    <div id="massText"></div>
+    <button id="massConfirm">Yes, delete them</button>
+    <button id="massRestore">Undo — put them back</button>
+  </div>
+  <div id="sugBox" hidden><h1>Suggestions</h1><ul id="suggestions"></ul></div>
+  <button id="disconnect">Disconnect</button>
+</div>
+<div id="error"></div>
+<script src="popup.js"></script>
+</body>
+</html>
