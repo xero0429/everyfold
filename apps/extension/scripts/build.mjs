@@ -21,7 +21,14 @@ const targets = {
   firefox: {
     ...base,
     background: { scripts: ['background.js'] },
-    browser_specific_settings: { gecko: { id: 'everyfold@xero0429.github.io', strict_min_version: '115.0' } },
+    // AMO: 2025-11-03 부터 새 애드온은 data_collection_permissions 필수(Firefox 140+ 내장 동의 화면).
+    // 북마크·토큰은 사용자가 정한 자기 서버로만 가지만, 확장 밖으로 나가므로 "전송" 으로 신고한다. 140 미만은 내장 동의 화면이 없어 막는다.
+    browser_specific_settings: {
+      gecko: {
+        id: 'everyfold@xero0429.github.io', strict_min_version: '140.0',
+        data_collection_permissions: { required: ['bookmarksInfo', 'authenticationInfo'] },
+      },
+    },
   },
 };
 
@@ -31,7 +38,7 @@ for (const [name, manifest] of Object.entries(targets)) {
   mkdirSync(out, { recursive: true });
   await build({
     entryPoints: { background: join(root, 'src/background.ts'), popup: join(root, 'src/popup.ts') },
-    outdir: out, bundle: true, format: 'iife', target: name === 'chrome' ? 'chrome116' : 'firefox115', logLevel: 'warning',
+    outdir: out, bundle: true, format: 'iife', target: name === 'chrome' ? 'chrome116' : 'firefox140', logLevel: 'warning',
   });
   cpSync(join(root, 'static'), out, { recursive: true });
   writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2));

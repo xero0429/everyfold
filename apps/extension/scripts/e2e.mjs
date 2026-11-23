@@ -80,6 +80,11 @@ try {
 
   await waitFor(async () => (await serverUrls()).includes('https://github.com/'), 'first upload on server');
   step('OK first upload reached server');
+  // 서버 판 확인(GET /version): 같은 리포의 서버면 호환 경고가 없어야 한다
+  const srv = await sw.evaluate(async () => (await chrome.storage.local.get('everyfold.state'))['everyfold.state'].server);
+  if (srv?.compat !== 'ok' || !srv.version) throw new Error(`server version check: ${JSON.stringify(srv)}`);
+  if (!(await popup.$eval('#compat', (e) => e.hidden))) throw new Error('compat warning shown against a current server');
+  step(`OK server v${srv.version} (api ${srv.api}) compatible, no warning`);
 
   step('create bookmark in browser (outside Everyfold folder) → background sync');
   await sw.evaluate(() => chrome.bookmarks.create({ parentId: '1', title: 'MDN', url: 'https://developer.mozilla.org/' }));

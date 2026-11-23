@@ -215,6 +215,8 @@ input:focus-visible, select:focus-visible { outline-offset: 0; border-color: var
 .callout.info { background: var(--accent-soft); border-color: var(--accent-soft-border); }
 .callout.info .callout-ic { color: var(--accent); }
 #errorDetail:empty { display: none; }
+.link { color: var(--accent); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.callout.danger .link, .callout.warn .link { color: inherit; }
 #connectForm > #error { margin-bottom: calc(var(--s1) * -1); }
 #settings > #error { margin-top: var(--s1); }
 

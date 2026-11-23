@@ -1,3 +1,5 @@
+import { BRAND, type Compat } from '@everyfold/core';
+
 /** 팝업 문구 도우미(DOM 없음 — 테스트에서 바로 부른다). 영어 기본. */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -12,6 +14,7 @@ export function friendlyError(raw: string): string {
   if (/Failed to fetch|NetworkError|Load failed|net::ERR_/i.test(raw)) return 'Can’t reach the server. Check the URL and your connection.';
   if (/invalid url|server url/i.test(raw)) return 'Enter a full server URL, like https://everyfold.you.workers.dev';
   if (/not.connected/.test(raw)) return 'This browser isn’t connected.';
+  if (/^server_outdated$/.test(raw)) return 'Your server needs an update before this browser can sync.';
   return raw;
 }
 
@@ -32,5 +35,36 @@ export function hostOf(url: string | null): string {
     return new URL(url).host;
   } catch {
     return url;
+  }
+}
+
+/** 팝업의 "서버 업데이트" 안내 링크(README 의 Updating your server) */
+export const UPDATE_HELP_URL = `${BRAND.repoUrl}#updating-your-server`;
+
+/** 서버·확장 판이 안 맞을 때 팝업에 띄울 안내. 맞으면 null. 막지 않는 경고가 기본이고 server_blocked 만 동기화를 멈춘다. */
+export function compatNotice(compat: Compat | undefined, serverVersion: string | null = null): { tone: 'warn' | 'danger'; title: string; text: string; link: { href: string; label: string } } | null {
+  const v = serverVersion ? ` (v${serverVersion})` : '';
+  const serverLink = { href: UPDATE_HELP_URL, label: 'How to update your server' };
+  switch (compat) {
+    case 'server_outdated':
+      return {
+        tone: 'warn', title: 'Server is out of date',
+        text: `Your Everyfold server${v} is older than this extension. Sync still works, but update your server copy on GitHub to get fixes and new features.`,
+        link: serverLink,
+      };
+    case 'server_blocked':
+      return {
+        tone: 'danger', title: 'Server update required',
+        text: `Your Everyfold server${v} is too old for this extension, so syncing is paused to keep your bookmarks safe. Update your server, then press Sync now.`,
+        link: serverLink,
+      };
+    case 'client_outdated':
+      return {
+        tone: 'warn', title: 'Extension is out of date',
+        text: `Your server${v} expects a newer Everyfold extension. Download the latest release zip and unzip it over your Everyfold folder, then reload the extension.`,
+        link: { href: `${BRAND.repoUrl}#2-install-the-extension`, label: 'How to update the extension' },
+      };
+    default:
+      return null;
   }
 }

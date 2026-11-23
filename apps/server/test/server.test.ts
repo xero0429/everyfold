@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setLlmOverride } from '../src/categorize.js';
 import { app } from '../src/index.js';
+import { API_VERSION, MIN_CLIENT_API } from '@everyfold/core';
 import { pull } from '../src/sync.js';
 import { Store } from '../src/store.js';
 import { IMPORT_MAX_BYTES } from '../src/importer.js';
@@ -27,6 +28,15 @@ afterAll(async () => {
 });
 
 const res = (r: { json: any }, i = 0) => r.json.results[i];
+
+describe('version', () => {
+  it('GET /version needs no token and reports server version + API range', async () => {
+    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'));
+    const r = await t.call('GET', '/version');
+    expect(r.status).toBe(200);
+    expect(r.json).toEqual({ service: 'everyfold', version: pkg.version, api: API_VERSION, minClientApi: MIN_CLIENT_API });
+  });
+});
 
 describe('auth', () => {
   it('rejects missing/invalid tokens', async () => {

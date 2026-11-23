@@ -47,6 +47,8 @@ const scenarios = [
     },
   },
   { name: 'mass', status: { ...base, pendingMassDelete: { deletes: 48, live: 60 } } },
+  { name: 'server-outdated', status: { ...base, compat: 'server_outdated', serverVersion: '0.1.0' } },
+  { name: 'server-blocked', status: { ...base, compat: 'server_blocked', serverVersion: '0.0.9', lastError: 'server_outdated' } },
   { name: 'move-hint', status: { ...base, showMoveHint: true, lastImport: { created: 214, mergedExisting: 12, mergedInFile: 3 } } },
   { name: 'suggest', status: base, suggestions: sugs, run: async (p) => { await p.click('#suggestNow'); await p.waitForTimeout(400); } },
   {

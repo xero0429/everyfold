@@ -1,0 +1,38 @@
+# Tag push (vX.Y.Z) → GitHub Release with the extension zips attached (developer-mode install, see README).
+# Only in the upstream repository — copies made by the Deploy button skip it.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    if: github.repository == 'xero0429/everyfold'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Check tag matches package versions
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          v=$(node -p "require('./apps/extension/package.json').version")
+          s=$(node -p "require('./apps/server/package.json').version")
+          [ "$TAG" = "v$v" ] && [ "$v" = "$s" ] || { echo "tag $TAG ≠ extension v$v / server v$s"; exit 1; }
+      - run: pnpm package:extension
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cd apps/extension/dist/store
+          sha256sum *.zip > SHA256SUMS.txt
+          gh release create "$TAG" --title "Everyfold $TAG" --generate-notes everyfold-*.zip SHA256SUMS.txt

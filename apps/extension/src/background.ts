@@ -106,6 +106,8 @@ function status() {
     failed: Object.values(s.failed).slice(0, 20).map((f) => ({ title: f.node.title, url: f.node.url, error: f.error, attempts: f.attempts, gaveUp: f.attempts >= MAX_APPLY_ATTEMPTS })),
     failedCount: Object.keys(s.failed).length,
     moveCaptures: s.moveCaptures,
+    // 서버 판 호환(경고) — 'ok' | 'server_outdated' | 'server_blocked' | 'client_outdated'
+    compat: s.server?.compat ?? 'ok', serverVersion: s.server?.version ?? null,
     // 첫 연결(첫 업로드) 뒤 한 번만: "옮기기를 켤 수 있어요" — 자동으로 옮기지는 않는다
     showMoveHint: engine.connected && s.initialUploadDone && !s.moveCaptures && !s.moveHintDismissed,
     lastImport: s.lastImport, pendingMassDelete: s.pendingMassDelete ? { deletes: s.pendingMassDelete.deletes, live: s.pendingMassDelete.live } : null,

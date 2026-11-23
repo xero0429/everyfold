@@ -6,6 +6,8 @@ name = "everyfold"
 main = "apps/server/src/index.ts"
 compatibility_date = "2026-11-01"
 compatibility_flags = ["nodejs_compat"]
+# 대시보드에서 정한 변수(LOCALE 등)를 배포 때 지우지 않는다 — Workers Builds 가 push 마다 다시 배포하기 때문
+keep_vars = true
 
 [[d1_databases]]
 binding = "DB"

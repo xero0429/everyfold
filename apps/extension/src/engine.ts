@@ -1,5 +1,6 @@
 import {
-  BRAND, isMassDelete, normalizeUrl, type MassDeleteError, type NodeRef, type PullResponse, type PushResponse, type ServerNode, type SyncOp,
+  BRAND, checkCompat, DEFAULT_COMPAT_POLICY, isMassDelete, normalizeUrl, type Compat, type CompatPolicy, type MassDeleteError, type NodeRef, type PullResponse,
+  type PushResponse, type ServerNode, type ServerVersionInfo, type SyncOp,
 } from '@everyfold/core';
 
 /**
@@ -73,7 +74,20 @@ export interface EngineState {
   movedOrigins: Record<string, { parentId: string; index?: number }>;
   /** 이 브라우저에 쓰지 못한 서버 노드(serverId → 마지막 서버 상태·이유). 다음 sync 에 다시 시도한다(상한 MAX_APPLY_ATTEMPTS). */
   failed: Record<string, FailedApply>;
+  /** 마지막으로 본 서버 판(GET /version)과 호환 판정. null = 아직 못 봤다 */
+  server: ServerCheck | null;
 }
+
+export interface ServerCheck {
+  /** 서버 릴리스 판. /version 이 없는 옛 서버면 null */
+  version: string | null;
+  api: number;
+  compat: Compat;
+  checkedAt: number;
+}
+
+/** 호환이 맞으면 이 간격으로만 /version 을 다시 본다(아니면 sync 마다 — 업데이트하면 경고가 바로 사라지게) */
+export const VERSION_CHECK_MS = 60 * 60_000;
 
 export interface FailedApply {
   node: ServerNode;
@@ -88,7 +102,7 @@ export const MAX_APPLY_ATTEMPTS = 5;
 export const emptyState = (): EngineState => ({
   serverUrl: null, token: null, deviceName: null, rev: 0, rootId: null, shadow: {}, map: {}, initialUploadDone: false,
   lastSyncAt: null, lastError: null, lastImport: null, pendingMassDelete: null, pendingMappings: [], captures: [], failed: {},
-  moveCaptures: false, moveHintDismissed: false, movedOrigins: {},
+  moveCaptures: false, moveHintDismissed: false, movedOrigins: {}, server: null,
 });
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -118,6 +132,8 @@ export class SyncEngine {
   /** pull 한 번 동안의 브라우저 폴더 자식 캐시(채택 검색용) */
   private childCache = new Map<string, BNode[]>();
   private running: Promise<unknown> = Promise.resolve();
+  /** 서버 호환 기준(시험에서 바꿔 끼운다) */
+  compatPolicy: CompatPolicy = DEFAULT_COMPAT_POLICY;
 
   constructor(readonly bm: BookmarksApi, readonly kv: KV, readonly fetchImpl: Fetch, readonly now: () => number = Date.now) {}
 
@@ -164,6 +180,26 @@ export class SyncEngine {
       this.state.token = r.token;
     }
     await this.save();
+    await this.checkServer(true);
+  }
+
+  /**
+   * GET /version 으로 서버 판을 보고 호환을 판정한다. 경고만 남기고 동작은 막지 않는다(server_blocked 일 때만 sync 가 멈춘다).
+   * 네트워크 오류 등으로 못 보면 이전 판정을 그대로 둔다. 404 = /version 이 없는 옛 서버.
+   */
+  async checkServer(force = false): Promise<ServerCheck | null> {
+    const prev = this.state.server;
+    if (!force && prev && prev.compat === 'ok' && this.now() - prev.checkedAt < VERSION_CHECK_MS) return prev;
+    let info: ServerVersionInfo | null = null;
+    try {
+      info = await this.api<ServerVersionInfo>('GET', '/version', undefined, null);
+    } catch (e) {
+      if (!(e instanceof HttpError && e.status === 404)) return prev;
+    }
+    if (info && typeof info.api !== 'number') info = null;
+    this.state.server = { version: info?.version ?? null, api: info?.api ?? 0, compat: checkCompat(info, this.compatPolicy), checkedAt: this.now() };
+    await this.save();
+    return this.state.server;
   }
 
   async disconnect() {
@@ -298,6 +334,8 @@ export class SyncEngine {
   private async syncOnce(opts: { confirmMassDelete?: boolean }): Promise<SyncReport> {
     if (!this.connected) throw new Error('not connected');
     const report: SyncReport = { pushed: 0, pulled: 0, applied: 0, failed: 0 };
+    // 서버가 필수 변경보다 낡았으면 아무것도 쓰지 않는다(경고만인 경우는 그대로 진행)
+    if ((await this.checkServer())?.compat === 'server_blocked') throw new Error('server_outdated');
     try {
       const rootId = await this.ensureRoot();
       if (!this.state.initialUploadDone) {

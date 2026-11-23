@@ -25,6 +25,18 @@ pnpm build:extension
 pnpm --filter @everyfold/extension e2e
 ```
 
+## Versions and compatibility
+
+The server and the extension update separately (servers update when their owner runs *Update from upstream*; extensions update from the stores), so a browser can meet an older or newer server.
+
+- `packages/core/src/version.ts` holds the API range. When you change the server API, bump `API_VERSION`. If the new extension needs it, raise `WARN_SERVER_BELOW` (popup warns "Server is out of date", sync continues). Raise `BLOCK_SERVER_BELOW` only when talking to an older server would damage data (sync stops until the server is updated). Raise `MIN_CLIENT_API` when the server drops support for older extensions.
+- Keep release versions in `apps/server/package.json` (served by `GET /version`) and `apps/extension/package.json` (the manifest version) in step.
+- New D1 migrations go in `apps/server/migrations/`; the `deploy` script applies them before every deploy, including updates via Workers Builds. Migrations must work on a live database that already has data.
+
+## Store packages
+
+`pnpm package:extension` builds `apps/extension/dist/store/` (Chrome zip, Firefox zip, source zip for AMO). Listing text, permission reasons and reviewer notes live in `docs/store/`; the release steps are in `docs/RELEASE-CHECKLIST.md`.
+
 ## Pull requests
 
 - Keep PRs focused; add or update tests for behaviour changes (`pnpm test` must pass — CI runs typecheck, tests and the extension build).

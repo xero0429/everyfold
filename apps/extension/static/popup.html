@@ -130,6 +130,16 @@
       </button>
     </div>
 
+    <!-- 서버·확장 판이 안 맞음(경고 — 동작은 막지 않는다. server_blocked 만 멈춤) -->
+    <div id="compat" class="callout warn" role="status" aria-labelledby="compatTitle" hidden>
+      <svg class="ic callout-ic" aria-hidden="true"><use id="compatIcon" href="#i-alert" /></svg>
+      <div class="callout-body">
+        <p id="compatTitle" class="callout-title"></p>
+        <p id="compatText"></p>
+        <p><a id="compatLink" class="link" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+      </div>
+    </div>
+
     <!-- 대량 삭제 보류: 결정이 필요하다 -->
     <div id="mass" class="callout warn" role="group" aria-labelledby="massTitle" hidden>
       <svg class="ic callout-ic" aria-hidden="true"><use href="#i-pause" /></svg>

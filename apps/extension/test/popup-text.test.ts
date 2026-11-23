@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { friendlyError, hostOf, plural, relTime } from '../src/popup-text.js';
+import { compatNotice, friendlyError, hostOf, plural, relTime, UPDATE_HELP_URL } from '../src/popup-text.js';
 
 describe('popup text', () => {
   it('pluralizes', () => {
@@ -28,5 +28,15 @@ describe('popup text', () => {
     expect(hostOf('http://127.0.0.1:8799')).toBe('127.0.0.1:8799');
     expect(hostOf('not a url')).toBe('not a url');
     expect(hostOf(null)).toBe('');
+  });
+  it('compat notices: nothing when ok, warn when the server is old, danger only when sync is blocked', () => {
+    expect(compatNotice('ok')).toBeNull();
+    expect(compatNotice(undefined)).toBeNull();
+    expect(compatNotice('server_outdated', '0.1.0')).toMatchObject({ tone: 'warn', title: 'Server is out of date', link: { href: UPDATE_HELP_URL } });
+    expect(compatNotice('server_outdated')?.text).toMatch(/Sync still works/);
+    expect(compatNotice('server_blocked')).toMatchObject({ tone: 'danger', title: 'Server update required' });
+    expect(compatNotice('client_outdated')?.title).toBe('Extension is out of date');
+    expect(UPDATE_HELP_URL).toMatch(/#updating-your-server$/);
+    expect(friendlyError('server_outdated')).toMatch(/needs an update/);
   });
 });

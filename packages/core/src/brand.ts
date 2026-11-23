@@ -6,4 +6,6 @@ export const BRAND = {
   name: 'Everyfold',
   rootFolderTitle: 'Everyfold',
   slug: 'everyfold',
+  /** 원본 저장소 — 팝업의 "서버 업데이트" 안내 링크가 여기 README 를 가리킨다 */
+  repoUrl: 'https://github.com/xero0429/everyfold',
 } as const;

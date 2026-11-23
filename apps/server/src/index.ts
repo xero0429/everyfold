@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { BRAND, type PushRequest } from '@everyfold/core';
+import { API_VERSION, BRAND, MIN_CLIENT_API, type PushRequest, type ServerVersionInfo } from '@everyfold/core';
+import pkg from '../package.json';
 import type { AppEnv, Env } from './env.js';
 import { newDeviceToken, requireAdmin, requireDevice, sha256Hex } from './auth.js';
 import { Store } from './store.js';
@@ -16,6 +17,10 @@ export const app = new Hono<AppEnv>();
 app.use('*', cors({ origin: '*', allowHeaders: ['Authorization', 'Content-Type'], allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] }));
 
 app.get('/', (c) => c.json({ service: BRAND.slug, name: BRAND.name, ok: true }));
+
+/* 서버 판·API 호환 범위(인증 없음) — 확장이 연결·동기화 때 보고 낡은 서버면 "update your server" 를 띄운다 */
+export const versionInfo = (): ServerVersionInfo => ({ service: BRAND.slug, version: pkg.version, api: API_VERSION, minClientApi: MIN_CLIENT_API });
+app.get('/version', (c) => c.json(versionInfo()));
 
 /* ── 기기 등록 (관리자 토큰) ── */
 app.post('/devices', requireAdmin, async (c) => {

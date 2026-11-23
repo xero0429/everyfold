@@ -1,6 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { Msg } from './background.js';
-import { friendlyError, hostOf, plural, relTime } from './popup-text.js';
+import { compatNotice, friendlyError, hostOf, plural, relTime } from './popup-text.js';
+import type { Compat } from '@everyfold/core';
 
 /**
  * 팝업 — 화면 3개: 연결 전(connect) / 연결 후(main: 상태 카드 → 가져오기 → 정리 제안) / 설정(settings).
@@ -17,6 +18,8 @@ interface Status {
   failedCount: number;
   moveCaptures: boolean;
   showMoveHint: boolean;
+  compat?: Compat;
+  serverVersion?: string | null;
 }
 interface Suggestion { id: string; title: string; kind?: string; actions?: unknown[] }
 
@@ -44,7 +47,9 @@ function setError(raw: string | null | undefined) {
 function badge(s: Status) {
   const [tone, icon, text] = syncing
     ? ['busy', 'i-spinner', 'Syncing…']
-    : s.pendingMassDelete
+    : s.compat === 'server_blocked'
+      ? ['danger', 'i-error', 'Update needed']
+      : s.pendingMassDelete
       ? ['warn', 'i-pause', 'Paused']
       : s.lastError
         ? ['danger', 'i-error', 'Sync failed']
@@ -103,7 +108,8 @@ function show(s: Status) {
   for (const id of ['device', 'setDevice']) $(id).textContent = s.deviceName ?? '';
   renderLast(s);
   badge(s);
-  setError(s.lastError);
+  // 서버가 너무 낡아 멈춘 경우는 아래 호환 안내가 설명하므로 오류 상자를 겹쳐 띄우지 않는다
+  setError(s.compat === 'server_blocked' && s.lastError === 'server_outdated' ? null : s.lastError);
 
   $('import').textContent = s.lastImport
     ? `First upload: ${s.lastImport.created} added, ${plural(s.lastImport.mergedExisting + s.lastImport.mergedInFile, 'duplicate')} merged`
@@ -132,6 +138,17 @@ function show(s: Status) {
 
   $<HTMLInputElement>('moveCaptures').checked = s.moveCaptures;
   $('moveHint').hidden = !s.showMoveHint;
+  const notice = s.connected ? compatNotice(s.compat, s.serverVersion ?? null) : null;
+  $('compat').hidden = !notice;
+  if (notice) {
+    $('compat').className = `callout ${notice.tone}`;
+    $('compatIcon').setAttribute('href', notice.tone === 'danger' ? '#i-error' : '#i-alert');
+    $('compatTitle').textContent = notice.title;
+    $('compatText').textContent = notice.text;
+    $<HTMLAnchorElement>('compatLink').href = notice.link.href;
+    $('compatLink').textContent = notice.link.label;
+  }
+
   $('mass').hidden = !s.pendingMassDelete;
   if (s.pendingMassDelete) {
     const { deletes, live } = s.pendingMassDelete;

@@ -1,0 +1,38 @@
+# Your copy of Everyfold → the latest upstream version.
+# The "Deploy to Cloudflare" button creates a *new* repository (not a GitHub fork), so there is no "Sync fork" button.
+# Run this from the Actions tab: Actions → "Update from upstream" → Run workflow. It commits the upstream changes to your
+# default branch (keeping your Worker name and D1 database id from wrangler.toml), and Workers Builds redeploys — the
+# `deploy` script applies new D1 migrations before deploying.
+name: Update from upstream
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Upstream branch or tag to update to
+        default: main
+        required: true
+  # Uncomment to check for updates every Monday:
+  # schedule:
+  #   - cron: '0 3 * * 1'
+permissions:
+  contents: write
+concurrency: update-from-upstream
+jobs:
+  update:
+    # nothing to do in the upstream repository itself
+    if: github.repository != 'xero0429/everyfold'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Update from upstream
+        env:
+          UPSTREAM: https://github.com/xero0429/everyfold.git
+          REF: ${{ inputs.ref || 'main' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/update-from-upstream.mjs --upstream "$UPSTREAM" --ref "$REF"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
