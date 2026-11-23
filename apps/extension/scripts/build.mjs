@@ -13,7 +13,8 @@ const base = {
   description: 'One bookmark library for every browser, auto-organized.',
   version: pkg.version,
   permissions: ['bookmarks', 'storage', 'alarms'],
-  action: { default_popup: 'popup.html', default_title: 'Everyfold' },
+  icons: { 16: 'icons/icon-16.png', 32: 'icons/icon-32.png', 48: 'icons/icon-48.png', 128: 'icons/icon-128.png' },
+  action: { default_popup: 'popup.html', default_title: 'Everyfold', default_icon: { 16: 'icons/icon-16.png', 32: 'icons/icon-32.png' } },
 };
 const targets = {
   chrome: { ...base, background: { service_worker: 'background.js' }, minimum_chrome_version: '116' },

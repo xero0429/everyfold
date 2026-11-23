@@ -2,61 +2,234 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="color-scheme" content="light dark" />
 <title>Everyfold</title>
-<style>
-  body { font: 13px system-ui, sans-serif; width: 320px; margin: 12px; color: #111; }
-  h1 { font-size: 15px; margin: 0 0 8px; }
-  label { display: block; margin: 6px 0 2px; color: #555; }
-  input, select { width: 100%; box-sizing: border-box; padding: 4px; }
-  button { margin-top: 8px; }
-  #error { color: #b91c1c; min-height: 1em; }
-  #moveHint { background: #e0f2fe; padding: 8px; border-radius: 6px; margin-top: 8px; }
-  label.check { display: flex; gap: 6px; align-items: flex-start; color: #111; } label.check input { width: auto; margin: 2px 0 0; }
-  #mass { background: #fef3c7; padding: 8px; border-radius: 6px; margin-top: 8px; }
-  ul { padding-left: 16px; } li button { margin: 2px 4px 0 0; }
-  .muted { color: #666; }
-</style>
+<link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-<h1>Everyfold</h1>
-<form id="connectForm">
-  <div id="connect">
-    <label for="serverUrl">Server URL</label><input id="serverUrl" placeholder="https://everyfold.&lt;you&gt;.workers.dev" required />
-    <label for="tokenKind">Token type</label>
-    <select id="tokenKind"><option value="admin">Admin token (registers this browser)</option><option value="device">Device token</option></select>
-    <label for="token">Token</label><input id="token" type="password" required />
-    <label for="deviceName">Device name</label><input id="deviceName" placeholder="Work laptop · Chrome" />
-    <button type="submit" id="connectBtn">Connect</button>
+<!-- 아이콘 심볼(인라인 — MV3 CSP 때문에 외부 폰트·CDN 없음). <use href="#i-…"> 로 쓴다. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-logo" viewBox="0 0 128 128">
+    <path fill="var(--logo-back)" d="M14 30a8 8 0 0 1 8-8h28l10 10h46a8 8 0 0 1 8 8v58a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8Z" />
+    <path fill="var(--logo-front)" d="M14 48a8 8 0 0 1 8-8h68l24 24v34a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8Z" />
+    <path fill="var(--logo-flap)" d="M90 40v16a8 8 0 0 0 8 8h16Z" />
+  </symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 11a8 8 0 0 0-14.6-4.5L4 8" /><path d="M4 3v5h5" /><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16" /><path d="M20 21v-5h-5" />
+  </symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 18l-6-6 6-6" />
+  </symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 6l6 6-6 6" />
+  </symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 15V3" /><path d="M7 8l5-5 5 5" /><path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
+  </symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" />
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+  </symbol>
+  <symbol id="i-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 7.5v5" /><path d="M12 16.5h.01" />
+  </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 7.5h.01" />
+  </symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+    <path d="M9 6v12" /><path d="M15 6v12" />
+  </symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />
+  </symbol>
+  <symbol id="i-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+    <path d="M12 3a9 9 0 1 1-9 9" />
+  </symbol>
+</svg>
+
+<header class="bar">
+  <svg class="logo" aria-hidden="true"><use href="#i-logo" /></svg>
+  <span class="brand">Everyfold</span>
+  <button id="openSettings" class="icon-btn" type="button" aria-label="Settings" title="Settings" hidden>
+    <svg class="ic" aria-hidden="true"><use href="#i-gear" /></svg>
+  </button>
+</header>
+
+<main class="views">
+  <div id="error" class="callout danger" role="alert" hidden>
+    <svg class="ic callout-ic" aria-hidden="true"><use href="#i-error" /></svg>
+    <div class="callout-body"><p id="errorText" class="callout-title"></p><p id="errorDetail" class="caption mono"></p></div>
   </div>
-</form>
-<div id="main" hidden>
-  <div class="muted"><span id="device"></span> → <span id="server"></span></div>
-  <div>Last sync: <span id="last"></span></div>
-  <div class="muted" id="import"></div>
-  <button id="syncNow">Sync now</button>
-  <div id="moveHint" hidden>
-    <div>You can move new bookmarks into Everyfold to avoid duplicates — turn it on in Settings.</div>
-    <button id="moveHintOn">Turn on</button>
-    <button id="moveHintLater">Not now</button>
-  </div>
-  <div id="failedBox" hidden><div id="failedText"></div><ul id="failedList" class="muted"></ul></div>
-  <div id="mass" hidden>
-    <div id="massText"></div>
-    <button id="massConfirm">Yes, delete them</button>
-    <button id="massRestore">Undo — put them back</button>
-  </div>
-  <label for="importFile">Import from another tool (Netscape HTML, Floccus XBEL, Karakeep / Linkwarden JSON, Raindrop CSV)</label>
-  <input id="importFile" type="file" accept=".html,.htm,.xbel,.xml,.json,.csv" />
-  <div class="muted" id="importResult"></div>
-  <button id="suggestNow">Suggest cleanup</button>
-  <div class="muted" id="sugResult"></div>
-  <div id="sugBox" hidden><h1>Suggestions</h1><ul id="suggestions"></ul></div>
-  <h1>Settings (this browser)</h1>
-  <label class="check" for="moveCaptures"><input id="moveCaptures" type="checkbox" />
-    <span>Move new bookmarks into Everyfold (instead of copying). Bookmarks you add outside the Everyfold folder are moved into their category; undoing that change on the server puts them back.</span></label>
-  <button id="disconnect">Disconnect</button>
-</div>
-<div id="error"></div>
+
+  <!-- 연결 전 -->
+  <section id="connect" class="view" aria-labelledby="connectTitle">
+    <h1 id="connectTitle" class="title">Connect this browser</h1>
+    <p class="lede">Keep one bookmark library in sync across every browser, on a server you run.</p>
+    <form id="connectForm" class="stack">
+      <div class="field">
+        <label for="serverUrl">Server URL</label>
+        <input id="serverUrl" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://everyfold.&lt;you&gt;.workers.dev" required />
+      </div>
+      <div class="field">
+        <label for="tokenKind">Token type</label>
+        <select id="tokenKind" aria-describedby="tokenHelp">
+          <option value="admin">Admin token — registers this browser</option>
+          <option value="device">Device token</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="token">Token</label>
+        <div class="input-wrap">
+          <input id="token" type="password" autocomplete="off" spellcheck="false" required aria-describedby="tokenHelp" />
+          <button id="tokenReveal" class="icon-btn in-input" type="button" aria-label="Show token" aria-pressed="false" title="Show token">
+            <svg class="ic" aria-hidden="true"><use href="#i-eye" /></svg>
+          </button>
+        </div>
+        <p id="tokenHelp" class="caption">Your server’s ADMIN_TOKEN. It’s used once to register this browser and isn’t stored.</p>
+      </div>
+      <div class="field">
+        <label for="deviceName">Device name <span class="optional">optional</span></label>
+        <input id="deviceName" autocomplete="off" placeholder="Work laptop · Chrome" aria-describedby="deviceHelp" />
+        <p id="deviceHelp" class="caption">Helps you tell browsers apart on the server.</p>
+      </div>
+      <button type="submit" id="connectBtn" class="btn primary block">
+        <svg class="ic spin" aria-hidden="true"><use href="#i-spinner" /></svg>
+        <span class="btn-label">Connect</span>
+      </button>
+    </form>
+  </section>
+
+  <!-- 연결 후 -->
+  <section id="main" class="view" aria-label="Sync" hidden>
+    <div class="card status-card">
+      <div class="status-head">
+        <span id="syncBadge" class="badge" data-tone="neutral" role="status">
+          <svg class="ic badge-ic" aria-hidden="true"><use id="syncBadgeIcon" href="#i-check" /></svg>
+          <span id="syncBadgeText">Up to date</span>
+        </span>
+        <span class="caption">Last sync <time id="last"></time></span>
+      </div>
+      <dl class="facts">
+        <div><dt>Device</dt><dd id="device"></dd></div>
+        <div><dt>Server</dt><dd id="server"></dd></div>
+      </dl>
+      <p id="import" class="caption"></p>
+      <button id="syncNow" class="btn primary block" type="button">
+        <svg class="ic idle-ic" aria-hidden="true"><use href="#i-sync" /></svg>
+        <svg class="ic spin" aria-hidden="true"><use href="#i-spinner" /></svg>
+        <span class="btn-label">Sync now</span>
+      </button>
+    </div>
+
+    <!-- 대량 삭제 보류: 결정이 필요하다 -->
+    <div id="mass" class="callout warn" role="group" aria-labelledby="massTitle" hidden>
+      <svg class="ic callout-ic" aria-hidden="true"><use href="#i-pause" /></svg>
+      <div class="callout-body">
+        <p id="massTitle" class="callout-title">Sync paused</p>
+        <p id="massText" role="alert"></p>
+        <div class="btn-row">
+          <button id="massRestore" class="btn secondary sm" type="button">Undo — put them back</button>
+          <button id="massConfirm" class="btn danger sm" type="button">Yes, delete them</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 이 브라우저에 쓰지 못한 항목 -->
+    <details id="failedBox" class="callout warn soft" hidden>
+      <summary>
+        <svg class="ic callout-ic" aria-hidden="true"><use href="#i-alert" /></svg>
+        <span id="failedText" class="callout-title"></span>
+        <svg class="ic chev" aria-hidden="true"><use href="#i-chevron" /></svg>
+      </summary>
+      <p class="caption failed-note">Everything else synced normally. Everyfold retries these on each sync.</p>
+      <ul id="failedList" class="failed-list"></ul>
+    </details>
+
+    <!-- Move 1회 안내 -->
+    <div id="moveHint" class="callout info" role="group" aria-labelledby="moveHintTitle" hidden>
+      <svg class="ic callout-ic" aria-hidden="true"><use href="#i-info" /></svg>
+      <div class="callout-body">
+        <p id="moveHintTitle" class="callout-title">Avoid duplicate bookmarks</p>
+        <p>Move new bookmarks into Everyfold instead of copying them. You can change this later in Settings.</p>
+        <div class="btn-row">
+          <button id="moveHintOn" class="btn primary sm" type="button">Turn on</button>
+          <button id="moveHintLater" class="btn ghost sm" type="button">Not now</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rows card flush">
+      <input id="importFile" class="file-input" type="file" accept=".html,.htm,.xbel,.xml,.json,.csv" aria-describedby="importFormats importResult" />
+      <label for="importFile" class="row" id="importRow" title="Netscape HTML · Floccus XBEL · Karakeep / Linkwarden JSON · Raindrop CSV">
+        <span class="row-ic"><svg class="ic idle-ic" aria-hidden="true"><use href="#i-upload" /></svg><svg class="ic spin" aria-hidden="true"><use href="#i-spinner" /></svg></span>
+        <span class="row-text">
+          <span class="row-title">Import bookmarks</span>
+          <span class="caption" aria-hidden="true">HTML, XBEL, JSON or CSV export</span>
+          <span id="importFormats" class="sr-only">Netscape HTML, Floccus XBEL, Karakeep or Linkwarden JSON, Raindrop CSV</span>
+        </span>
+      </label>
+      <p id="importResult" class="result" role="status"></p>
+      <button id="suggestNow" class="row" type="button" aria-describedby="sugHelp">
+        <span class="row-ic"><svg class="ic idle-ic" aria-hidden="true"><use href="#i-sparkle" /></svg><svg class="ic spin" aria-hidden="true"><use href="#i-spinner" /></svg></span>
+        <span class="row-text">
+          <span class="row-title">Suggest cleanup</span>
+          <span id="sugHelp" class="caption">Tidy categories. Nothing changes until you apply.</span>
+        </span>
+      </button>
+      <p id="sugResult" class="result" role="status"></p>
+      <div id="sugBox" hidden>
+        <h2 class="sr-only">Suggestions</h2>
+        <ul id="suggestions" class="sug-list"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 설정(이 브라우저) -->
+  <section id="settings" class="view" aria-labelledby="settingsTitle" hidden>
+    <div class="subbar">
+      <button id="closeSettings" class="icon-btn" type="button" aria-label="Back" title="Back">
+        <svg class="ic" aria-hidden="true"><use href="#i-back" /></svg>
+      </button>
+      <h1 id="settingsTitle" class="title" tabindex="-1">Settings</h1>
+    </div>
+
+    <h2 class="section-title">This browser</h2>
+    <div class="card">
+      <div class="setting">
+        <label for="moveCaptures" class="setting-text">
+          <span class="row-title">Move new bookmarks into Everyfold</span>
+          <span id="moveDesc" class="caption">Bookmarks you add outside the Everyfold folder are moved into their category instead of copied. Undoing that change on the server puts them back.</span>
+        </label>
+        <input id="moveCaptures" class="switch" type="checkbox" role="switch" aria-describedby="moveDesc" />
+      </div>
+    </div>
+
+    <h2 class="section-title">Connection</h2>
+    <div class="card">
+      <dl class="facts">
+        <div><dt>Device</dt><dd id="setDevice"></dd></div>
+        <div><dt>Server</dt><dd id="setServer"></dd></div>
+      </dl>
+      <button id="disconnect" class="btn danger-outline block" type="button" aria-expanded="false" aria-controls="disconnectConfirm">Disconnect…</button>
+      <div id="disconnectConfirm" class="confirm" role="group" aria-labelledby="disconnectQ" hidden>
+        <p id="disconnectQ">Stop syncing this browser? Bookmarks already here stay where they are.</p>
+        <div class="btn-row">
+          <button id="disconnectNo" class="btn secondary sm" type="button">Cancel</button>
+          <button id="disconnectYes" class="btn danger sm" type="button">Disconnect</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
 <script src="popup.js"></script>
 </body>
 </html>

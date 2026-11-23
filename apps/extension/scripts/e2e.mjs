@@ -63,11 +63,14 @@ try {
   step('connect from popup');
   const popup = await ctx.newPage();
   await popup.goto(`chrome-extension://${extId}/popup.html`);
+  if (process.env.E2E_SHOTS) await popup.screenshot({ path: join(process.env.E2E_SHOTS, 'e2e-connect.png'), clip: { x: 0, y: 0, width: 360, height: 560 } });
   await popup.fill('#serverUrl', BASE);
   await popup.fill('#token', ADMIN);
   await popup.fill('#deviceName', 'e2e-chromium');
   await popup.click('#connectBtn');
   await popup.waitForSelector('#main:not([hidden])', { timeout: 20000 });
+  // E2E_SHOTS=<폴더> 면 실제 확장(실 CSP) 팝업 화면을 남긴다
+  const shot = async (name) => process.env.E2E_SHOTS && popup.screenshot({ path: join(process.env.E2E_SHOTS, `e2e-${name}.png`), clip: { x: 0, y: 0, width: 360, height: Math.min(600, await popup.evaluate(() => Math.ceil(document.body.getBoundingClientRect().height))) } });
   const token = await sw.evaluate(async () => (await chrome.storage.local.get('everyfold.state'))['everyfold.state'].token);
   const api = async (method, path, body) => {
     const r = await fetch(BASE + path, { method, headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -121,6 +124,7 @@ try {
     return !document.getElementById('sugBox')?.hidden || (t && t !== 'Looking for cleanups…');
   }, null, { timeout: 20000 });
   step(`OK suggestions: ${await popup.$$eval('#suggestions li', (l) => l.length)} · ${await popup.textContent('#sugResult')}`);
+  await shot('connected');
   console.log('[e2e] PASS');
 } catch (e) {
   console.error('[e2e] FAIL', e);
