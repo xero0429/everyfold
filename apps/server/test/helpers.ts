@@ -5,7 +5,8 @@ import { app } from '../src/index.js';
 import type { Env } from '../src/env.js';
 
 /** miniflare 로컬 D1(workerd SQLite) 위에 마이그레이션을 적용하고, Worker 앱을 그 DB 로 직접 호출한다. */
-export async function setup() {
+/** 기존 시험은 한국어 기본 카테고리를 기준으로 쓴다(LOCALE=ko). en 시험은 setup({ locale: null }) */
+export async function setup(opts: { locale?: string | null } = {}) {
   // wrangler 의 getPlatformProxy = miniflare(workerd) 로컬 D1. persist:false → 테스트마다 빈 메모리 DB.
   const proxy = await getPlatformProxy<{ DB: D1Database }>({ configPath: fileURLToPath(new URL('../../../wrangler.toml', import.meta.url)), persist: false });
   const DB = proxy.env.DB;
@@ -15,9 +16,10 @@ export async function setup() {
     const stmts = sql.split(/;\s*(?:\n|$)/).map((s) => s.trim()).filter(Boolean);
     await DB.batch(stmts.map((s) => DB.prepare(s)));
   }
-  const env: Env = { DB, ADMIN_TOKEN: 'admin-secret' };
-  const call = async (method: string, path: string, opts: { token?: string; body?: unknown; raw?: string } = {}) => {
-    const headers: Record<string, string> = {};
+  const locale = opts.locale === undefined ? 'ko' : opts.locale;
+  const env: Env = { DB, ADMIN_TOKEN: 'admin-secret', ...(locale ? { LOCALE: locale } : {}) };
+  const call = async (method: string, path: string, opts: { token?: string; body?: unknown; raw?: string; headers?: Record<string, string> } = {}) => {
+    const headers: Record<string, string> = { ...(opts.headers ?? {}) };
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     let body: string | undefined;
     if (opts.raw !== undefined) {

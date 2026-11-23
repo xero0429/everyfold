@@ -13,6 +13,8 @@ export interface NodeRow {
   rev: number;
   created_at: number;
   updated_at: number;
+  /** 기본 카테고리 안정 키(0002). 사용자 폴더·북마크는 null */
+  cat_key?: string | null;
 }
 
 /** 변경 기록에 남기는 노드 상태(rev 제외) */
@@ -35,6 +37,9 @@ export function rowToNode(r: NodeRow): ServerNode {
 }
 
 export const SYSTEM_DEVICE = 'system';
+
+/** writeMany 한 batch 에 담는 노드 수 */
+const WRITE_CHUNK = 1000;
 
 /**
  * 서버 쓰기는 모두 이 클래스를 거친다. 변경 하나 = rev 하나 + changes 기록 하나 (D1 batch 로 원자적).
@@ -90,13 +95,15 @@ export class Store {
     return (r?.p ?? -1) + 1;
   }
 
-  /** 노드 하나를 after 상태로 쓰고 변경 기록을 남긴다. 새 rev 를 돌려준다. */
-  async write(after: NodeState, opts: { op: string; deviceId: string; batchId: string | null; before?: NodeState | null }): Promise<number> {
+  /**
+   * 노드 하나를 쓰는 문장 묶음: rev+1 → nodes upsert → changes 기록 → (선택) cat_key → 새 rev SELECT(마지막 문장).
+   * 여러 개를 한 D1 batch 에 담으면 트랜잭션 하나·Worker 호출 1회로 끝난다.
+   */
+  writeStmts(after: NodeState, opts: { op: string; deviceId: string; batchId: string | null; before: NodeState | null; catKey?: string }): D1PreparedStatement[] {
     const now = Date.now();
     const norm = after.kind === 'bookmark' && after.url ? normalizeUrl(after.url) : null;
-    const before = opts.before === undefined ? await this.get(after.id).then((r) => (r ? rowToState(r) : null)) : opts.before;
     const REV = `(SELECT value FROM meta WHERE key='rev')`;
-    const res = await this.db.batch([
+    const stmts = [
       this.db.prepare(`UPDATE meta SET value = value + 1 WHERE key='rev'`),
       this.db
         .prepare(
@@ -109,39 +116,38 @@ export class Store {
         .bind(after.id, after.kind, after.parentId, after.title, after.url, norm, after.position, after.deleted ? 1 : 0, now, now),
       this.db
         .prepare(`INSERT INTO changes (rev, node_id, op, before_json, after_json, device_id, batch_id, created_at) VALUES (${REV}, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(after.id, opts.op, before ? JSON.stringify(before) : null, JSON.stringify(after), opts.deviceId, opts.batchId, now),
-      this.db.prepare(`SELECT value FROM meta WHERE key='rev'`),
-    ]);
-    const last = res[3]?.results?.[0] as { value: number } | undefined;
+        .bind(after.id, opts.op, opts.before ? JSON.stringify(opts.before) : null, JSON.stringify(after), opts.deviceId, opts.batchId, now),
+    ];
+    if (opts.catKey) stmts.push(this.db.prepare(`UPDATE nodes SET cat_key=? WHERE id=?`).bind(opts.catKey, after.id));
+    stmts.push(this.db.prepare(`SELECT value FROM meta WHERE key='rev'`));
+    return stmts;
+  }
+
+  /** 노드 하나를 after 상태로 쓰고 변경 기록을 남긴다. 새 rev 를 돌려준다. */
+  async write(after: NodeState, opts: { op: string; deviceId: string; batchId: string | null; before?: NodeState | null }): Promise<number> {
+    const before = opts.before === undefined ? await this.get(after.id).then((r) => (r ? rowToState(r) : null)) : opts.before;
+    const res = await this.db.batch(this.writeStmts(after, { ...opts, before }));
+    const last = res[res.length - 1]?.results?.[0] as { value: number } | undefined;
     return last?.value ?? 0;
   }
 
-  /** 여러 노드를 한 번에(50개씩 batch) 쓴다 — 가져오기용. 각 노드가 자기 rev·변경 기록을 받는다. */
-  async writeMany(items: Array<{ after: NodeState; before: NodeState | null; op: string }>, deviceId: string, batchId: string): Promise<void> {
-    const REV = `(SELECT value FROM meta WHERE key='rev')`;
-    for (let i = 0; i < items.length; i += 50) {
-      const now = Date.now();
-      const stmts: D1PreparedStatement[] = [];
-      for (const { after, before, op } of items.slice(i, i + 50)) {
-        const norm = after.kind === 'bookmark' && after.url ? normalizeUrl(after.url) : null;
-        stmts.push(
-          this.db.prepare(`UPDATE meta SET value = value + 1 WHERE key='rev'`),
-          this.db
-            .prepare(
-              `INSERT INTO nodes (id, kind, parent_id, title, url, norm_url, position, deleted, rev, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${REV}, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, parent_id=excluded.parent_id, title=excluded.title,
-                 url=excluded.url, norm_url=excluded.norm_url, position=excluded.position, deleted=excluded.deleted,
-                 rev=excluded.rev, updated_at=excluded.updated_at`,
-            )
-            .bind(after.id, after.kind, after.parentId, after.title, after.url, norm, after.position, after.deleted ? 1 : 0, now, now),
-          this.db
-            .prepare(`INSERT INTO changes (rev, node_id, op, before_json, after_json, device_id, batch_id, created_at) VALUES (${REV}, ?, ?, ?, ?, ?, ?, ?)`)
-            .bind(after.id, op, before ? JSON.stringify(before) : null, JSON.stringify(after), deviceId, batchId, now),
-        );
-      }
+  /**
+   * 여러 노드를 한 번에 쓴다 — 가져오기용. 각 노드가 자기 rev·변경 기록을 받는다.
+   * D1 batch 하나는 Worker 호출 한도(Free 50/요청)에서 1회로 센다 → 큰 묶음(WRITE_CHUNK)으로 보내 호출 수를 줄인다.
+   */
+  async writeMany(items: Array<{ after: NodeState; before: NodeState | null; op: string; catKey?: string }>, deviceId: string, batchId: string): Promise<void> {
+    for (let i = 0; i < items.length; i += WRITE_CHUNK) {
+      const stmts = items.slice(i, i + WRITE_CHUNK).flatMap(({ after, before, op, catKey }) =>
+        this.writeStmts(after, { op, deviceId, batchId, before, ...(catKey ? { catKey } : {}) }).slice(0, -1),
+      );
       await this.db.batch(stmts);
     }
+  }
+
+  /** id 목록으로 한 번에 읽는다(json_each — 바인딩 1개라 100개 한도에 안 걸린다) */
+  async getMany(ids: readonly string[]): Promise<NodeRow[]> {
+    if (!ids.length) return [];
+    return (await this.db.prepare(`SELECT * FROM nodes WHERE id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify([...new Set(ids)])).all<NodeRow>()).results;
   }
 
   /** baseRev 이후 다른 기기가 바꾼 필드 목록 */

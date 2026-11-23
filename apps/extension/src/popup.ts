@@ -8,6 +8,8 @@ interface Status {
   connected: boolean; serverUrl: string | null; deviceName: string | null; lastSyncAt: number | null; lastError: string | null;
   lastImport: { created: number; mergedExisting: number; mergedInFile: number } | null;
   pendingMassDelete: { deletes: number; live: number } | null;
+  failed: Array<{ title: string; url: string | null; error: string; attempts: number; gaveUp: boolean }>;
+  failedCount: number;
 }
 
 function show(s: Status) {
@@ -20,6 +22,14 @@ function show(s: Status) {
   $('import').textContent = s.lastImport
     ? `First upload: ${s.lastImport.created} added, ${s.lastImport.mergedExisting + s.lastImport.mergedInFile} duplicates merged`
     : '';
+  $('failedBox').hidden = !s.failedCount;
+  $('failedText').textContent = s.failedCount ? `${s.failedCount} item(s) could not be written to this browser — the rest synced normally.` : '';
+  const ul = $('failedList');
+  ul.replaceChildren(...s.failed.map((f) => {
+    const li = document.createElement('li');
+    li.textContent = `${f.title || f.url || '(untitled)'} — ${f.error}${f.gaveUp ? ' (stopped retrying)' : ''}`;
+    return li;
+  }));
   $('mass').hidden = !s.pendingMassDelete;
   if (s.pendingMassDelete) $('massText').textContent = `Sync paused: ${s.pendingMassDelete.deletes} of ${s.pendingMassDelete.live} bookmarks would be deleted.`;
 }

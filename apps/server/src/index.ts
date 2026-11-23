@@ -24,7 +24,7 @@ app.post('/devices', requireAdmin, async (c) => {
   const id = crypto.randomUUID();
   const token = newDeviceToken();
   await c.env.DB.prepare(`INSERT INTO devices (id, name, token_hash, created_at) VALUES (?, ?, ?, ?)`).bind(id, name, await sha256Hex(token), Date.now()).run();
-  await ensureSeeded(new Store(c.env.DB));
+  await ensureSeeded(new Store(c.env.DB), c.env, c.req.header('accept-language'));
   return c.json({ deviceId: id, name, token }, 201);
 });
 app.get('/devices', requireAdmin, async (c) => {
@@ -40,7 +40,7 @@ app.delete('/devices/:id', requireAdmin, async (c) => {
 const api = new Hono<AppEnv>();
 api.use('*', requireDevice);
 api.use('*', async (c, next) => {
-  await ensureSeeded(new Store(c.env.DB));
+  await ensureSeeded(new Store(c.env.DB), c.env, c.req.header('accept-language'));
   await next();
 });
 
@@ -58,8 +58,9 @@ api.post('/sync/push', async (c) => {
   if (body.ops.length > 5000) return c.json({ error: 'too_many_ops', max: 5000 }, 413);
   const store = new Store(c.env.DB);
   try {
-    const res = await push(store, c.env, c.get('device').id, body);
+    // 오늘 스냅샷이 없으면 이 push 를 적용하기 "전" 상태로 먼저 남긴다(확인된 대량 삭제라도 그 전 상태가 남는다)
     if (body.ops.length) await ensureDailySnapshot(store);
+    const res = await push(store, c.env, c.get('device').id, body);
     return c.json(res);
   } catch (e) {
     if (e instanceof MassDeleteBlocked) return c.json(e.info, 409);
@@ -117,7 +118,7 @@ api.post('/categories', async (c) => {
 });
 
 api.get('/suggestions', async (c) => c.json({ suggestions: await listSuggestions(new Store(c.env.DB), c.req.query('status') ?? 'pending') }));
-api.post('/suggestions/generate', async (c) => c.json({ suggestions: await generateSuggestions(new Store(c.env.DB)) }));
+api.post('/suggestions/generate', async (c) => c.json({ suggestions: await generateSuggestions(new Store(c.env.DB), c.env) }));
 api.post('/suggestions/:id/approve', async (c) => {
   const r = await decideSuggestion(new Store(c.env.DB), c.req.param('id'), true, c.get('device').id);
   return 'error' in r ? c.json(r, r.error === 'not_found' ? 404 : 409) : c.json(r);
@@ -134,10 +135,13 @@ api.post('/snapshots/:id/restore', async (c) => {
   return r ? c.json(r) : c.json({ error: 'not_found' }, 404);
 });
 
-api.get('/changes', async (c) => c.json({ batches: await listChanges(new Store(c.env.DB), Number(c.req.query('limit') ?? 100) || 100) }));
+api.get('/changes', async (c) => {
+  const limit = Math.min(500, Math.max(1, Number(c.req.query('limit') ?? 100) || 100));
+  return c.json({ batches: await listChanges(new Store(c.env.DB), limit) });
+});
 api.post('/changes/undo', async (c) => {
-  const body = await c.req.json<{ batchId?: string }>().catch(() => ({} as { batchId?: string }));
-  if (!body.batchId) return c.json({ error: 'batchId_required' }, 400);
+  const body = await c.req.json<{ batchId?: unknown }>().catch(() => ({} as { batchId?: unknown }));
+  if (typeof body.batchId !== 'string' || !body.batchId) return c.json({ error: 'batchId_required' }, 400);
   const r = await undoBatch(new Store(c.env.DB), body.batchId, c.get('device').id);
   return r ? c.json(r) : c.json({ error: 'not_found' }, 404);
 });

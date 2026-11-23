@@ -1,26 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  BUILTIN_RULES, classifyByRules, classifyItems, learnRules, matchDomainRule, matchLearned, sanitizeDecisions,
+  BUILTIN_RULES, categoryName, classifyByRules, pickLocale, classifyItems, learnRules, matchDomainRule, matchLearned, sanitizeDecisions,
   type LlmCategorizer,
   type LlmItem,
 } from '../src/index.js';
-import { AnthropicCategorizer } from '../src/classify/anthropic.js';
+import { AnthropicCategorizer, systemPrompt } from '../src/classify/anthropic.js';
 
 const cats = [
-  { id: 'c-dev', name: '개발' },
-  { id: 'c-news', name: '뉴스' },
-  { id: 'c-video', name: '영상·음악' },
-  { id: 'c-work', name: '업무·도구' },
+  { id: 'c-dev', name: '개발', key: 'dev' },
+  { id: 'c-news', name: '뉴스', key: 'news' },
+  { id: 'c-video', name: '영상·음악', key: 'media' },
+  { id: 'c-work', name: '업무·도구', key: 'work' },
   { id: 'c-cook', name: '요리' },
 ];
 
 describe('domain rules', () => {
   it('matches host and subdomains, longest wins', () => {
-    expect(matchDomainRule('https://gist.github.com/x', BUILTIN_RULES)?.rule.category).toBe('개발');
-    expect(matchDomainRule('https://www.youtube.com/watch?v=1', BUILTIN_RULES)?.rule.category).toBe('영상·음악');
+    expect(matchDomainRule('https://gist.github.com/x', BUILTIN_RULES)?.rule.category).toBe('dev');
+    expect(matchDomainRule('https://www.youtube.com/watch?v=1', BUILTIN_RULES)?.rule.category).toBe('media');
     expect(matchDomainRule('https://notgithub.com', BUILTIN_RULES)).toBeNull();
     // news.naver.com(뉴스) 가 naver 쪽 다른 규칙보다 우선
-    expect(matchDomainRule('https://n.news.naver.com/article/1', BUILTIN_RULES)?.rule.category).toBe('뉴스');
+    expect(matchDomainRule('https://n.news.naver.com/article/1', BUILTIN_RULES)?.rule.category).toBe('news');
   });
   it('path rules beat host rules', () => {
     const rules = [{ match: 'google.com', category: '업무·도구' }, { match: 'google.com/maps', category: '여행·지도' }];
@@ -121,5 +121,26 @@ describe('LLM step', () => {
     expect(calls[0]!.body.output_config.format.type).toBe('json_schema');
     const h = calls[0]!.headers;
     expect(h.get('x-api-key') ?? h.get('authorization')).toMatch(/test-key/);
+  });
+});
+
+describe('category keys and locale', () => {
+  it('rules follow the key, so a renamed category still gets its bookmarks', () => {
+    const renamed = [{ id: 'c-dev', name: 'My code stuff', key: 'dev' }];
+    expect(classifyByRules({ id: '1', url: 'https://github.com/a/b', title: '' }, { categories: renamed })).toMatchObject({ categoryId: 'c-dev', source: 'rule' });
+    // 키 없는 같은 이름 폴더는 규칙 대상이 아니다
+    expect(classifyByRules({ id: '1', url: 'https://github.com/a/b', title: '' }, { categories: [{ id: 'x', name: 'dev' }] }).source).toBe('none');
+  });
+  it('picks locale from Accept-Language-like values, default en', () => {
+    expect(pickLocale('ko-KR,ko;q=0.9,en;q=0.8')).toBe('ko');
+    expect(pickLocale(undefined, 'en-US,en')).toBe('en');
+    expect(pickLocale('fr-FR')).toBe('en');
+    expect(pickLocale()).toBe('en');
+    expect(categoryName('inbox', 'en')).toBe('Unsorted');
+    expect(categoryName('inbox', 'ko')).toBe('미분류');
+  });
+  it('LLM prompt asks for names in the user language', () => {
+    expect(systemPrompt('ko')).toContain('Korean');
+    expect(systemPrompt()).toContain('English');
   });
 });

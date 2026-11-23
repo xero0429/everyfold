@@ -1,4 +1,4 @@
-import { flattenBookmarks, groupDuplicates, isImportableUrl, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
+import { clampTitle, flattenBookmarks, groupDuplicates, isImportableUrl, MAX_URL_LENGTH, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
 import { Store, type NodeState } from './store.js';
 import { addNewCategorySuggestion, classifyWithContext } from './categorize.js';
 import type { Env } from './env.js';
@@ -47,7 +47,7 @@ export async function importItems(
   }
   if (Array.isArray(input.items)) items = items.concat(input.items.filter((i) => i && typeof i.url === 'string'));
   const received = items.length;
-  const safe = items.filter((i) => isImportableUrl(i.url));
+  const safe = items.filter((i) => typeof i.url === 'string' && i.url.length <= MAX_URL_LENGTH && isImportableUrl(i.url));
   const skippedUnsafe = received - safe.length;
   items = safe;
 
@@ -60,34 +60,76 @@ export async function importItems(
   const fresh = groups.filter((g) => !existing.has(g.key));
   const mergedExisting = groups.length - fresh.length;
 
-  const { results, inboxId, llmUsed, llmError } = await classifyWithContext(
+  const { results, inboxId, folders, llmUsed, llmError } = await classifyWithContext(
     store, env, fresh.map((g, i) => ({ id: String(i), url: g.keep.url, title: g.keep.title ?? '' })),
   );
 
   const batchId = crypto.randomUUID();
-  const nextPos = new Map<string | null, number>();
-  const posFor = async (parent: string | null) => {
-    if (!nextPos.has(parent)) nextPos.set(parent, await store.nextPosition(parent));
-    const p = nextPos.get(parent)!;
-    nextPos.set(parent, p + 1);
+  const writes: Array<{ after: NodeState; before: null; op: string }> = [];
+  // 위치는 부모별 최댓값을 한 번에 읽어 메모리에서 늘린다(D1 호출 수)
+  const maxPos = new Map<string | null, number>(
+    (await store.db.prepare(`SELECT parent_id AS p, MAX(position) AS m FROM nodes WHERE deleted=0 GROUP BY parent_id`).all<{ p: string | null; m: number }>()).results.map((r) => [r.p, r.m]),
+  );
+  const posFor = (parent: string | null) => {
+    const p = (maxPos.get(parent) ?? -1) + 1;
+    maxPos.set(parent, p);
     return p;
   };
-  const writes: Array<{ after: NodeState; before: null; op: string }> = [];
+
+  // 원본 폴더 구조 재현용: (부모, 이름) → 폴더 id. 기존 폴더와 같은 이름이면 합친다.
+  const folderKey = (parent: string | null, title: string) => `${parent ?? ''}\u0000${title.trim().toLowerCase()}`;
+  const folderIndex = new Map(folders.map((f) => [folderKey(f.parent_id, f.title), f.id]));
+  const names = new Map(folders.map((f) => [f.id, f.title]));
+  const categoryByName = new Map(folders.filter((f) => f.parent_id === null).map((f) => [f.title.trim().toLowerCase(), f.id]));
+  const ensurePath = (path: readonly string[]): string | null => {
+    let parent: string | null = null;
+    for (const raw of path) {
+      const title = clampTitle(raw.trim());
+      if (!title) continue;
+      const k = folderKey(parent, title);
+      let id = folderIndex.get(k);
+      if (!id) {
+        id = crypto.randomUUID();
+        writes.push({ after: { id, kind: 'folder', parentId: parent, title, url: null, position: posFor(parent), deleted: false }, before: null, op: 'import' });
+        folderIndex.set(k, id);
+        names.set(id, title);
+      }
+      parent = id;
+    }
+    return parent;
+  };
+  /** 규칙·학습·LLM 이 못 정한 항목의 자리: 말단 폴더 이름이 기존 카테고리와 같으면 거기, 아니면 원본 경로 그대로, 경로가 없으면 미분류 */
+  const placeUnsorted = (path: readonly string[] | undefined): string | null => {
+    const p = stripContainers(path ?? []);
+    if (!p.length) return inboxId;
+    const leaf = categoryByName.get(p[p.length - 1]!.trim().toLowerCase());
+    if (leaf) return leaf;
+    return ensurePath(p);
+  };
+
   const byCategory: Record<string, number> = {};
   const pendingSuggest = new Map<string, string[]>();
-  const names = new Map((await store.liveFolders()).map((f) => [f.id, f.title]));
+  let created = 0;
   for (let i = 0; i < fresh.length; i++) {
     const g = fresh[i]!;
     const c = results[i]!;
-    const parentId = c.categoryId ?? inboxId;
+    const parentId = c.categoryId ?? placeUnsorted(g.keep.path);
     const id = crypto.randomUUID();
-    writes.push({ after: { id, kind: 'bookmark', parentId, title: g.keep.title ?? '', url: g.keep.url, position: await posFor(parentId), deleted: false }, before: null, op: 'import' });
+    writes.push({ after: { id, kind: 'bookmark', parentId, title: clampTitle(g.keep.title), url: g.keep.url, position: posFor(parentId), deleted: false }, before: null, op: 'import' });
+    created++;
     const label = parentId ? names.get(parentId) ?? parentId : '(root)';
     byCategory[label] = (byCategory[label] ?? 0) + 1;
     if (c.suggestedCategory) pendingSuggest.set(c.suggestedCategory, [...(pendingSuggest.get(c.suggestedCategory) ?? []), id]);
   }
   await store.writeMany(writes, deviceId, batchId);
   const suggestions: string[] = [];
-  for (const [name, ids] of pendingSuggest) suggestions.push(await addNewCategorySuggestion(store, name, ids));
-  return { batchId, received, created: writes.length, mergedExisting, mergedInFile, skippedUnsafe, byCategory, suggestions, llmUsed, ...(llmError ? { llmError } : {}) };
+  for (const [name, ids] of pendingSuggest) suggestions.push(await addNewCategorySuggestion(store, env, name, ids));
+  return { batchId, received, created, mergedExisting, mergedInFile, skippedUnsafe, byCategory, suggestions, llmUsed, ...(llmError ? { llmError } : {}) };
+}
+
+/** 브라우저 최상위 컨테이너(북마크바·기타 북마크 등)는 폴더로 재현하지 않는다 — 그 안의 사용자 폴더부터 */
+const CONTAINER = /^(bookmarks bar|bookmarks toolbar|bookmarks menu|other bookmarks|mobile bookmarks|favorites bar|favourites bar|favorites|toolbar|menu|unfiled|unsorted bookmarks|북마크바|북마크 바|북마크 메뉴|북마크 도구 모음|기타 북마크|모바일 북마크|즐겨찾기 표시줄|즐겨찾기 모음)$/i;
+export function stripContainers(path: readonly string[]): string[] {
+  const p = path.map((x) => x.trim()).filter(Boolean);
+  return p.length && CONTAINER.test(p[0]!) ? p.slice(1) : p;
 }

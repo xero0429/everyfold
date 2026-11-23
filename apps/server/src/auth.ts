@@ -24,11 +24,21 @@ async function safeEqual(a: string, b: string): Promise<boolean> {
   return diff === 0;
 }
 
+/** 관리자 토큰이 틀렸을 때 응답을 늦추는 시간 */
+export let ADMIN_FAIL_DELAY_MS = 1000;
+export function setAdminFailDelay(ms: number) {
+  ADMIN_FAIL_DELAY_MS = ms;
+}
+
 export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
   const admin = c.env.ADMIN_TOKEN;
   if (!admin) return c.json({ error: 'admin_token_not_configured', hint: 'wrangler secret put ADMIN_TOKEN' }, 503);
   const t = bearer(c.req.header('authorization'));
-  if (!t || !(await safeEqual(t, admin))) return c.json({ error: 'unauthorized' }, 401);
+  if (!t || !(await safeEqual(t, admin))) {
+    // 관리자 토큰 무차별 대입을 느리게 한다(요청마다 1초) — 토큰은 32바이트 이상 난수를 권장(README)
+    await new Promise((r) => setTimeout(r, ADMIN_FAIL_DELAY_MS));
+    return c.json({ error: 'unauthorized' }, 401);
+  }
   await next();
 };
 

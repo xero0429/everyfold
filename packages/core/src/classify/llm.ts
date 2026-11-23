@@ -12,6 +12,8 @@ export interface LlmItem {
 export interface LlmCategory {
   id: string;
   name: string;
+  /** 기본 카테고리면 안정 키(rules.ts CATEGORY_KEYS). 사용자가 만든 폴더는 없음 */
+  key?: string | null;
 }
 
 export type LlmDecision =

@@ -63,8 +63,24 @@ export function normalizeUrl(raw: string): string {
  */
 export function isImportableUrl(raw: string): boolean {
   const u = raw.trim();
-  return /^[a-z][a-z0-9+.-]*:/i.test(u) && !/^(javascript|vbscript|data|place):/i.test(u);
+  return isParsableUrl(u) && !/^(javascript|vbscript|data|place):/i.test(u);
 }
+
+/** 브라우저가 받아 주는 URL 꼴인가 — 스킴이 있고 WHATWG URL 로 파싱된다. 못 받는 문자열을 서버에 두면 모든 기기 pull 에서 실패한다. */
+export function isParsableUrl(raw: string): boolean {
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(raw)) return false;
+  try {
+    new URL(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 제목·URL 길이 상한(문자). 제목은 잘라 담고, 이보다 긴 URL 은 받지 않는다. */
+export const MAX_TITLE_LENGTH = 2048;
+export const MAX_URL_LENGTH = 2048;
+export const clampTitle = (t: string | undefined | null) => (t ?? '').slice(0, MAX_TITLE_LENGTH);
 
 export function hostOf(raw: string): string | null {
   try {

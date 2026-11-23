@@ -1,5 +1,5 @@
 import browser from 'webextension-polyfill';
-import { SyncEngine, HttpError, type BNode, type BookmarksApi, type EngineState, type KV, type SyncReport } from './engine.js';
+import { SyncEngine, HttpError, MAX_APPLY_ATTEMPTS, type BNode, type BookmarksApi, type EngineState, type KV, type SyncReport } from './engine.js';
 
 /**
  * 백그라운드 — 브라우저 이벤트를 엔진에 잇는다.
@@ -36,7 +36,7 @@ const ready = engine.load();
 
 async function badge(report?: SyncReport) {
   const s = engine.state;
-  const text = s.pendingMassDelete || report?.blocked ? '!' : s.lastError ? '×' : '';
+  const text = s.pendingMassDelete || report?.blocked ? '!' : s.lastError || Object.keys(s.failed).length ? '×' : '';
   await browser.action?.setBadgeText({ text }).catch(() => undefined);
   if (text) await browser.action?.setBadgeBackgroundColor({ color: text === '!' ? '#d97706' : '#dc2626' }).catch(() => undefined);
 }
@@ -100,6 +100,8 @@ function status() {
   const s = engine.state;
   return {
     connected: engine.connected, serverUrl: s.serverUrl, deviceName: s.deviceName, lastSyncAt: s.lastSyncAt, lastError: s.lastError,
+    failed: Object.values(s.failed).slice(0, 20).map((f) => ({ title: f.node.title, url: f.node.url, error: f.error, attempts: f.attempts, gaveUp: f.attempts >= MAX_APPLY_ATTEMPTS })),
+    failedCount: Object.keys(s.failed).length,
     lastImport: s.lastImport, pendingMassDelete: s.pendingMassDelete ? { deletes: s.pendingMassDelete.deletes, live: s.pendingMassDelete.live } : null,
   };
 }

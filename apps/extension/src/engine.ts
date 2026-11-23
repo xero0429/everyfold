@@ -63,11 +63,23 @@ export interface EngineState {
   pendingMassDelete: { ops: SyncOp[]; deletes: number; live: number; at: number } | null;
   pendingMappings: Array<{ browserId: string; serverId: string }>;
   captures: Array<{ browserId: string; url: string; title: string }>;
+  /** 이 브라우저에 쓰지 못한 서버 노드(serverId → 마지막 서버 상태·이유). 다음 sync 에 다시 시도한다(상한 MAX_APPLY_ATTEMPTS). */
+  failed: Record<string, FailedApply>;
 }
+
+export interface FailedApply {
+  node: ServerNode;
+  error: string;
+  attempts: number;
+  at: number;
+}
+
+/** 같은 노드를 이 횟수만큼 못 쓰면 더 시도하지 않는다(서버에서 그 노드가 다시 바뀌면 처음부터 다시 센다) */
+export const MAX_APPLY_ATTEMPTS = 5;
 
 export const emptyState = (): EngineState => ({
   serverUrl: null, token: null, deviceName: null, rev: 0, rootId: null, shadow: {}, map: {}, initialUploadDone: false,
-  lastSyncAt: null, lastError: null, lastImport: null, pendingMassDelete: null, pendingMappings: [], captures: [],
+  lastSyncAt: null, lastError: null, lastImport: null, pendingMassDelete: null, pendingMappings: [], captures: [], failed: {},
 });
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -82,6 +94,8 @@ export interface SyncReport {
   pushed: number;
   pulled: number;
   applied: number;
+  /** 이번에 브라우저에 쓰지 못한 노드 수(state.failed 에 이유가 남는다) */
+  failed: number;
   blocked?: MassDeleteError | { error: 'mass_delete_local'; deletes: number; liveBookmarks: number };
   imported?: { created: number; mergedExisting: number; mergedInFile: number };
 }
@@ -267,7 +281,7 @@ export class SyncEngine {
   /* ───────── 한 번 동기화 ───────── */
   private async syncOnce(opts: { confirmMassDelete?: boolean }): Promise<SyncReport> {
     if (!this.connected) throw new Error('not connected');
-    const report: SyncReport = { pushed: 0, pulled: 0, applied: 0 };
+    const report: SyncReport = { pushed: 0, pulled: 0, applied: 0, failed: 0 };
     try {
       const rootId = await this.ensureRoot();
       if (!this.state.initialUploadDone) {
@@ -307,6 +321,7 @@ export class SyncEngine {
       const pulled = await this.pullAndApply(rootId);
       report.pulled = pulled.pulled;
       report.applied = pulled.applied;
+      report.failed = pulled.failed;
       this.state.lastSyncAt = this.now();
       this.state.lastError = null;
       if (!report.blocked) this.state.pendingMassDelete = null;
@@ -407,9 +422,10 @@ export class SyncEngine {
   }
 
   /* ───────── 서버 → 브라우저 ───────── */
-  async pullAndApply(rootId: string): Promise<{ pulled: number; applied: number }> {
+  async pullAndApply(rootId: string): Promise<{ pulled: number; applied: number; failed: number }> {
     let pulled = 0;
     let applied = 0;
+    let failedNow = 0;
     const changed: ServerNode[] = [];
     let more = true;
     let rev = this.state.rev;
@@ -427,7 +443,23 @@ export class SyncEngine {
     }
     pulled = changed.length;
     const latest = new Map<string, ServerNode>();
-    for (const n of changed) latest.set(n.id, n);
+    // 지난번에 못 쓴 노드를 다시 시도한다 — 새로 받은 상태가 있으면 그쪽이 이긴다(아래 set 이 덮는다)
+    for (const [sid, f] of Object.entries(this.state.failed)) if (f.attempts < MAX_APPLY_ATTEMPTS) latest.set(sid, f.node);
+    for (const n of changed) {
+      if (this.state.failed[n.id] && this.state.failed[n.id]!.node.rev !== n.rev) this.state.failed[n.id]!.attempts = 0; // 서버에서 바뀌었다 → 다시 센다
+      latest.set(n.id, n);
+    }
+    // 노드 하나가 실패해도(브라우저가 URL 을 거부·적용 중 사용자가 지움 등) 나머지는 계속 쓰고 rev 는 전진한다
+    const attempt = async (n: ServerNode, asRoot = false): Promise<'changed' | 'same' | 'defer' | 'failed'> => {
+      if (asRoot && n.parentId && this.state.failed[n.parentId]) return this.fail(n, 'parent folder could not be written');
+      try {
+        const r = await this.applyNode(asRoot ? { ...n, parentId: null } : n, rootId);
+        if (r !== 'defer') delete this.state.failed[n.id];
+        return r;
+      } catch (e) {
+        return this.fail(n, e instanceof Error ? e.message : String(e));
+      }
+    };
 
     this.applying = true;
     try {
@@ -436,13 +468,18 @@ export class SyncEngine {
       for (let pass = 0; pass < 50 && queue.length; pass++) {
         const later: ServerNode[] = [];
         for (const n of queue) {
-          const r = await this.applyNode(n, rootId);
+          const r = await attempt(n);
           if (r === 'defer') later.push(n);
           else if (r === 'changed') applied++;
+          else if (r === 'failed') failedNow++;
         }
         if (later.length === queue.length) {
-          // 부모를 못 찾는 노드는 루트에 둔다
-          for (const n of later) if ((await this.applyNode({ ...n, parentId: null }, rootId)) === 'changed') applied++;
+          // 부모를 못 찾는 노드는 루트에 둔다(부모 자체가 실패했으면 같이 실패로 남긴다)
+          for (const n of later) {
+            const r = await attempt(n, true);
+            if (r === 'changed') applied++;
+            else if (r === 'failed') failedNow++;
+          }
           break;
         }
         queue = later;
@@ -452,7 +489,13 @@ export class SyncEngine {
     }
     this.state.rev = rev;
     await this.save();
-    return { pulled, applied };
+    return { pulled, applied, failed: failedNow };
+  }
+
+  private fail(n: ServerNode, error: string): 'failed' {
+    const prev = this.state.failed[n.id];
+    this.state.failed[n.id] = { node: n, error, attempts: (prev && prev.node.rev === n.rev ? prev.attempts : 0) + 1, at: this.now() };
+    return 'failed';
   }
 
   private async exists(id: string): Promise<BNode | null> {

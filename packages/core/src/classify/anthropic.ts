@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { Locale } from './rules.js';
 import { sanitizeDecisions, type LlmCategorizer, type LlmCategory, type LlmDecision, type LlmItem } from './llm.js';
 
 /**
@@ -17,8 +18,8 @@ const SCHEMA = {
         type: 'object',
         properties: {
           itemId: { type: 'string' },
-          categoryId: { type: 'string', description: '기존 카테고리 id. 맞는 것이 없으면 빈 문자열' },
-          newCategory: { type: 'string', description: '기존 카테고리가 모두 안 맞을 때만 제안할 새 이름. 아니면 빈 문자열' },
+          categoryId: { type: 'string', description: 'Existing category id, or empty string if none fits' },
+          newCategory: { type: 'string', description: 'New category name to suggest only when no existing category fits, otherwise empty string' },
         },
         required: ['itemId', 'categoryId', 'newCategory'],
         additionalProperties: false,
@@ -29,13 +30,18 @@ const SCHEMA = {
   additionalProperties: false,
 } as const;
 
-const SYSTEM = [
-  '너는 북마크 분류기다. 각 북마크를 주어진 카테고리 중 하나에 배정한다.',
-  '- 가능한 한 기존 카테고리(categoryId)를 고른다.',
-  '- 어느 것도 맞지 않을 때만 newCategory 에 짧은 한국어 이름(2~12자)을 제안하고 categoryId 는 빈 문자열로 둔다.',
-  '- 판단할 수 없으면 둘 다 빈 문자열로 둔다.',
-  '- 모든 itemId 에 대해 정확히 하나의 결정을 낸다.',
-].join('\n');
+const LANGUAGE: Record<Locale, string> = { en: 'English', ko: 'Korean' };
+
+/** 새 카테고리 이름을 사용자 로캘 언어로 받도록 프롬프트를 만든다 */
+export function systemPrompt(locale: Locale = 'en'): string {
+  return [
+    'You are a bookmark classifier. Assign each bookmark to one of the given categories.',
+    '- Prefer an existing category (categoryId) whenever one reasonably fits.',
+    `- Only if none fits, put a short ${LANGUAGE[locale]} name (1-3 words) in newCategory and leave categoryId empty.`,
+    '- If you cannot decide, leave both empty.',
+    '- Return exactly one decision for every itemId.',
+  ].join('\n');
+}
 
 export interface AnthropicCategorizerOptions {
   apiKey: string;
@@ -43,12 +49,15 @@ export interface AnthropicCategorizerOptions {
   /** 테스트용 fetch 주입 */
   fetch?: typeof fetch;
   baseURL?: string;
+  /** 새 카테고리 제안 이름의 언어 */
+  locale?: Locale;
 }
 
 export class AnthropicCategorizer implements LlmCategorizer {
   readonly name = 'anthropic';
   private client: Anthropic;
   private model: string;
+  private locale: Locale;
 
   constructor(opts: AnthropicCategorizerOptions) {
     this.client = new Anthropic({
@@ -58,6 +67,7 @@ export class AnthropicCategorizer implements LlmCategorizer {
       maxRetries: 1,
     });
     this.model = opts.model ?? DEFAULT_MODEL;
+    this.locale = opts.locale ?? 'en';
   }
 
   async categorize(items: readonly LlmItem[], categories: readonly LlmCategory[]): Promise<LlmDecision[]> {
@@ -69,7 +79,7 @@ export class AnthropicCategorizer implements LlmCategorizer {
     const res = await this.client.messages.create({
       model: this.model,
       max_tokens: 8000,
-      system: SYSTEM,
+      system: systemPrompt(this.locale),
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{ role: 'user', content: JSON.stringify(payload) }],
     });

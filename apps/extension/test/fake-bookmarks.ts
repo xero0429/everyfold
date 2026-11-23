@@ -11,6 +11,8 @@ export class FakeBookmarks implements BookmarksApi {
     ids.forEach((id, i) => this.nodes.set(id, { id, parentId: '0', title: titles[i]!, children: [] }));
   }
   ids = { bar: '', other: '' };
+  /** 이 브라우저가 거부하는 URL(실제 브라우저의 "Invalid URL." 흉내) */
+  rejectUrl: ((url: string) => boolean) | null = null;
   private out(id: string, deep: boolean): BNode {
     const n = this.nodes.get(id);
     if (!n) throw new Error(`Can't find bookmark for id. ${id}`);
@@ -25,6 +27,7 @@ export class FakeBookmarks implements BookmarksApi {
   async create(d: { parentId: string; title: string; url?: string; index?: number }) {
     const p = this.nodes.get(d.parentId);
     if (!p?.children) throw new Error('bad parent');
+    if (d.url && this.rejectUrl?.(d.url)) throw new Error('Invalid URL.');
     const id = String(this.seq++);
     this.nodes.set(id, { id, parentId: d.parentId, title: d.title, ...(d.url ? { url: d.url } : { children: [] }) });
     p.children.splice(d.index ?? p.children.length, 0, id);
@@ -32,6 +35,7 @@ export class FakeBookmarks implements BookmarksApi {
   }
   async update(id: string, d: { title?: string; url?: string }) {
     const n = this.nodes.get(id)!;
+    if (d.url && this.rejectUrl?.(d.url)) throw new Error('Invalid URL.');
     if (d.title !== undefined) n.title = d.title;
     if (d.url !== undefined) n.url = d.url;
     return this.out(id, false);

@@ -1,4 +1,6 @@
-import { classifyByRules, INBOX_CATEGORY } from '@everyfold/core';
+import { classifyByRules } from '@everyfold/core';
+import type { Env } from './env.js';
+import { serverLocale, t } from './locale.js';
 import { rowToState, Store, type NodeState } from './store.js';
 import { categoryContext } from './categorize.js';
 
@@ -41,9 +43,10 @@ export async function listSuggestions(store: Store, status = 'pending'): Promise
 }
 
 /** 구조 개편 제안을 새로 계산한다(같은 종류의 이전 pending 제안은 바꿔 끼운다). */
-export async function generateSuggestions(store: Store): Promise<Suggestion[]> {
+export async function generateSuggestions(store: Store, env: Env): Promise<Suggestion[]> {
   const ctx = await categoryContext(store);
-  const folders = await store.liveFolders();
+  const folders = ctx.folders;
+  const locale = await serverLocale(store, env);
   const created: string[] = [];
   const put = async (kind: string, title: string, actions: Action[]) => {
     await store.db.prepare(`DELETE FROM suggestions WHERE kind=? AND status='pending'`).bind(kind).run();
@@ -60,16 +63,19 @@ export async function generateSuggestions(store: Store): Promise<Suggestion[]> {
       const c = classifyByRules({ id: n.id, url: n.url!, title: n.title }, { categories: ctx.categories, learned: ctx.learned });
       if (c.categoryId && c.categoryId !== ctx.inboxId) moves.push({ type: 'move', nodeId: n.id, to: c.categoryId });
     }
-    await put('apply_rules', `미분류 ${moves.length}개를 규칙대로 정리`, moves);
+    await put('apply_rules', t(locale, 'applyRules')(moves.length), moves);
   }
 
+  // 폴더마다 묻지 않고 한 번에 센다(D1 호출 수)
+  const counts = new Map(
+    (await store.db.prepare(`SELECT parent_id AS p, COUNT(*) AS n FROM nodes WHERE deleted=0 AND parent_id IS NOT NULL GROUP BY parent_id`).all<{ p: string; n: number }>()).results.map((r) => [r.p, r.n]),
+  );
   const empty: Action[] = [];
   for (const f of folders) {
-    if (f.title === INBOX_CATEGORY && f.parent_id === null) continue;
-    const kids = await store.liveChildren(f.id);
-    if (kids.length === 0) empty.push({ type: 'delete_folder', id: f.id });
+    if (f.id === ctx.inboxId) continue;
+    if (!counts.get(f.id)) empty.push({ type: 'delete_folder', id: f.id });
   }
-  await put('remove_empty', `빈 카테고리 ${empty.length}개 지우기`, empty);
+  await put('remove_empty', t(locale, 'removeEmpty')(empty.length), empty);
 
   const all = await listSuggestions(store);
   return all.filter((s) => created.includes(s.id) || s.kind === 'new_category');

@@ -6,6 +6,8 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   /** 선택: LLM 모델 덮어쓰기 (기본 claude-haiku-5-5) */
   LLM_MODEL?: string;
+  /** 선택: 기본 카테고리·서버 문구·LLM 제안 이름의 언어 ('en' | 'ko'). 없으면 첫 기기의 브라우저 언어, 그것도 없으면 en */
+  LOCALE?: string;
 }
 
 export interface Device {

@@ -66,6 +66,8 @@ export interface OpResult {
   serverWon?: string[];
   /** 이 op 적용 후 노드 rev (기기가 다음 baseRev 로 쓴다) */
   rev?: number;
+  /** merged(이미 있던 노드에 합침) 이면 서버 노드의 현재 상태 — 기기는 제목·위치를 이것으로 맞춘다 */
+  node?: ServerNode;
 }
 
 export interface PushResponse {

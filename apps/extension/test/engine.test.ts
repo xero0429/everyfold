@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setup } from '@everyfold/server/testing';
 import { app } from '@everyfold/server';
 import { BRAND } from '@everyfold/core';
-import { SyncEngine } from '../src/engine.js';
+import { MAX_APPLY_ATTEMPTS, SyncEngine } from '../src/engine.js';
 import { FakeBookmarks, MemKV } from './fake-bookmarks.js';
 
 /**
@@ -144,5 +144,45 @@ describe('extension engine against real server (local D1)', () => {
     await A.e.sync();
     const r = await A.e.sync();
     expect(r).toMatchObject({ pushed: 0, applied: 0 });
+  });
+
+  it('a node this browser refuses does not stop sync: others apply, rev advances, failure is recorded and retried with a cap (M1)', async () => {
+    const C = { bm: new FakeBookmarks('chrome'), e: undefined as unknown as SyncEngine };
+    C.e = new SyncEngine(C.bm, new MemKV(), fetchVia);
+    C.bm.rejectUrl = (u) => u.includes('refused.example');
+    await C.e.connect('http://local', { adminToken: 'admin-secret', deviceName: 'C' });
+    await C.e.sync();
+    // A 가 3개를 만든다 — 그중 하나는 C 가 못 받는 URL
+    const dev = A.bm.findFolder('개발', root(A)) ?? (await A.bm.create({ parentId: root(A), title: '개발' })).id;
+    await A.bm.create({ parentId: dev, title: 'ok1', url: 'https://m1.example/1' });
+    await A.bm.create({ parentId: dev, title: 'bad', url: 'https://refused.example/x' });
+    await A.bm.create({ parentId: dev, title: 'ok2', url: 'https://m1.example/2' });
+    await A.e.sync();
+    const r = await C.e.sync();
+    expect(r.failed).toBe(1);
+    expect(C.bm.findUrl('https://m1.example/1')).toHaveLength(1);
+    expect(C.bm.findUrl('https://m1.example/2')).toHaveLength(1);
+    const failed = Object.values(C.e.state.failed);
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ error: 'Invalid URL.', attempts: 1 });
+    const revAfter = C.e.state.rev;
+    expect(revAfter).toBeGreaterThan(0);
+    // 다음 sync 도 예외 없이 돈다 — 나중 변경도 계속 받는다
+    await A.bm.create({ parentId: dev, title: 'ok3', url: 'https://m1.example/3' });
+    await A.e.sync();
+    await C.e.sync();
+    expect(C.bm.findUrl('https://m1.example/3')).toHaveLength(1);
+    expect(C.e.state.rev).toBeGreaterThan(revAfter);
+    // 상한까지 시도하면 멈춘다
+    for (let i = 0; i < MAX_APPLY_ATTEMPTS + 2; i++) await C.e.sync();
+    expect(Object.values(C.e.state.failed)[0]!.attempts).toBe(MAX_APPLY_ATTEMPTS);
+    // 브라우저가 받게 되면(또는 서버에서 바뀌면) 다시 시도해서 성공한다
+    C.bm.rejectUrl = null;
+    const [badA] = A.bm.findUrl('https://refused.example/x');
+    await A.bm.update(badA!, { title: 'bad renamed' });
+    await A.e.sync();
+    await C.e.sync();
+    expect(C.bm.findUrl('https://refused.example/x')).toHaveLength(1);
+    expect(C.e.state.failed).toEqual({});
   });
 });

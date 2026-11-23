@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setLlmOverride } from '../src/categorize.js';
 import { app } from '../src/index.js';
+import { pull } from '../src/sync.js';
+import { Store } from '../src/store.js';
 import { IMPORT_MAX_BYTES } from '../src/importer.js';
 import { setup, SimDevice } from './helpers.js';
 
@@ -340,11 +342,42 @@ describe('hardening', () => {
     expect(A.live().some((n) => /^(javascript|data|vbscript):/i.test(n.url ?? ''))).toBe(false);
   });
 
+  it('push rejects strings browsers cannot store as URLs, keeps user bookmarklets', async () => {
+    const r = await A.push([
+      { op: 'create', clientRef: 'h1', kind: 'bookmark', parent: null, title: 'bad', url: 'not a url' },
+      { op: 'create', clientRef: 'h2', kind: 'bookmark', parent: null, title: 'long', url: 'https://x.example/' + 'a'.repeat(3000) },
+      { op: 'create', clientRef: 'h3', kind: 'bookmark', parent: null, title: 'bm', url: 'javascript:void(document.title)' },
+      { op: 'create', clientRef: 'h4', kind: 'bookmark', parent: null, title: 'T'.repeat(5000), url: 'https://h4.example/' },
+    ]);
+    expect(r.json.results.map((x: any) => x.status)).toEqual(['rejected', 'rejected', 'applied', 'applied']);
+    expect(r.json.results[0].reason).toBe('invalid url');
+    expect(r.json.results[1].reason).toBe('url too long');
+    await A.pull();
+    expect(A.byUrl('https://h4.example/').title).toHaveLength(2048);
+  });
+
   it('import rejects bodies over the size cap with 413', async () => {
     const big = 'x'.repeat(IMPORT_MAX_BYTES + 1);
     const r = await t.call('POST', '/import', { token: A.token, raw: big });
     expect(r.status).toBe(413);
     expect(r.json).toMatchObject({ error: 'too_large', maxBytes: IMPORT_MAX_BYTES });
+  });
+
+  it('daily snapshot is taken before the push is applied (Should 7)', async () => {
+    await t.DB.prepare(`DELETE FROM snapshots WHERE kind='daily'`).run();
+    const before = (await t.DB.prepare(`SELECT value FROM meta WHERE key='rev'`).first<{ value: number }>())!.value;
+    const r = await A.push([{ op: 'create', clientRef: 's7', kind: 'bookmark', parent: null, title: 's7', url: 'https://s7.example/' }]);
+    expect(r.json.rev).toBeGreaterThan(before);
+    const daily = (await t.call('GET', '/snapshots', { token: A.token })).json.snapshots.find((x: any) => x.kind === 'daily');
+    expect(daily.rev).toBe(before);
+  });
+
+  it('bad input never becomes a 500 with DB text (Should 5)', async () => {
+    const u = await t.call('POST', '/changes/undo', { token: A.token, body: { batchId: {} } });
+    expect(u.status).toBe(400);
+    const ch = await t.call('GET', '/changes?limit=999999', { token: A.token });
+    expect(ch.status).toBe(200);
+    expect(ch.json.batches.length).toBeLessThanOrEqual(500);
   });
 
   it('500 responses do not leak internal error text', async () => {
@@ -363,5 +396,178 @@ describe('hardening', () => {
     } finally {
       console.error = orig;
     }
+  });
+});
+
+describe('import keeps the user folder structure for what rules cannot place (M2)', () => {
+  const folders = async () => (await t.call('GET', '/categories', { token: A.token })).json.categories as Array<{ id: string; name: string; parentId: string | null }>;
+
+  it('Netscape export: personal folders are recreated, browser containers are not, same-name category is reused', async () => {
+    const html = `<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p>
+      <DT><H3 PERSONAL_TOOLBAR_FOLDER="true">Bookmarks bar</H3><DL><p>
+        <DT><H3>Recipes</H3><DL><p>
+          <DT><H3>Korean</H3><DL><p><DT><A HREF="https://m2-food.example/kimchi">kimchi</A></DL><p>
+          <DT><A HREF="https://m2-food.example/bread">bread</A>
+        </DL><p>
+        <DT><H3>금융</H3><DL><p><DT><A HREF="https://m2-money.example/budget">budget</A></DL><p>
+        <DT><A HREF="https://m2-loose.example/">loose</A>
+      </DL><p></DL><p>`;
+    const r = await t.call('POST', '/import', { token: A.token, raw: html });
+    expect(r.status).toBe(200);
+    const fs = await folders();
+    const recipes = fs.find((f) => f.name === 'Recipes' && f.parentId === null)!;
+    expect(recipes).toBeTruthy();
+    const korean = fs.find((f) => f.name === 'Korean' && f.parentId === recipes.id)!;
+    expect(korean).toBeTruthy();
+    expect(fs.some((f) => f.name === 'Bookmarks bar')).toBe(false);
+    expect(fs.filter((f) => f.name === '금융')).toHaveLength(1); // 기존 카테고리로 합침
+    await A.pull();
+    expect(A.byUrl('https://m2-food.example/kimchi').parentId).toBe(korean.id);
+    expect(A.byUrl('https://m2-food.example/bread').parentId).toBe(recipes.id);
+    expect(A.byUrl('https://m2-money.example/budget').parentId).toBe(A.folder('금융').id);
+    expect(A.byUrl('https://m2-loose.example/').parentId).toBe(A.folder('미분류').id);
+    // 원본 폴더 재현도 같은 batch 라 한 번에 되돌릴 수 있다
+    const undo = await t.call('POST', '/changes/undo', { token: A.token, body: { batchId: r.json.batchId } });
+    expect(undo.status).toBe(200);
+    expect((await folders()).some((f) => f.name === 'Recipes')).toBe(false);
+  });
+
+  it('Linkwarden nested collections become nested folders', async () => {
+    const lw = JSON.stringify({
+      collections: [
+        { id: 1, name: 'Research', parentId: null, links: [{ id: 1, name: 'paper', type: 'url', url: 'https://m2-research.example/p1' }] },
+        { id: 2, name: 'Cooking', parentId: 1, links: [{ id: 2, name: 'stew', type: 'url', url: 'https://m2-research.example/stew' }] },
+      ],
+    });
+    const r = await t.call('POST', '/import', { token: A.token, body: { file: lw, format: 'linkwarden' } });
+    expect(r.status).toBe(200);
+    const fs = await folders();
+    const research = fs.find((f) => f.name === 'Research' && f.parentId === null)!;
+    expect(research).toBeTruthy();
+    expect(fs.find((f) => f.name === 'Cooking' && f.parentId === research.id)).toBeTruthy();
+  });
+});
+
+describe('category keys + locale (M3)', () => {
+  it('renamed default category keeps getting its rule matches; renamed inbox still is the inbox', async () => {
+    await A.pull();
+    const dev = A.folder('개발');
+    const inbox = A.folder('미분류');
+    await A.push([
+      { op: 'update', id: dev.id, baseRev: dev.rev, title: 'Code' },
+      { op: 'update', id: inbox.id, baseRev: inbox.rev, title: 'Later' },
+    ]);
+    const r = await t.call('POST', '/import', { token: A.token, body: { items: [{ url: 'https://gitlab.com/m3/x', title: 'gl' }, { url: 'https://m3-unknown.example/', title: 'u' }] } });
+    expect(r.json.byCategory).toEqual({ Code: 1, Later: 1 });
+    await A.pull();
+    const d = A.folder('Code');
+    const l = A.folder('Later');
+    await A.push([
+      { op: 'update', id: d.id, baseRev: d.rev, title: '개발' },
+      { op: 'update', id: l.id, baseRev: l.rev, title: '미분류' },
+    ]);
+  });
+
+  it('fresh server seeds English categories by default and Korean from Accept-Language', async () => {
+    const en = await setup({ locale: null });
+    try {
+      const d = await en.register('en-device');
+      const names = (await en.call('GET', '/categories', { token: d.token })).json.categories.map((c: any) => c.name);
+      expect(names).toEqual(expect.arrayContaining(['Development', 'News', 'Unsorted']));
+      expect(names).not.toContain('미분류');
+      const imp = await en.call('POST', '/import', { token: d.token, body: { items: [{ url: 'https://github.com/x/y', title: 'g' }, { url: 'https://m3.example/', title: 'm' }] } });
+      expect(imp.json.byCategory).toEqual({ Development: 1, Unsorted: 1 });
+    } finally {
+      await en.close();
+    }
+    const ko = await setup({ locale: null });
+    try {
+      const r = await ko.call('POST', '/devices', { token: 'admin-secret', body: { name: 'ko' }, headers: { 'accept-language': 'ko-KR,ko;q=0.9' } });
+      const names = (await ko.call('GET', '/categories', { token: r.json.token })).json.categories.map((c: any) => c.name);
+      expect(names).toEqual(expect.arrayContaining(['개발', '미분류']));
+    } finally {
+      await ko.close();
+    }
+  });
+});
+
+describe('D1 call budget (Should 6)', () => {
+  /** D1 호출(first/all/run/raw/batch)을 센다 — Workers Free 는 요청당 50 */
+  const counted = (db: D1Database) => {
+    let calls = 0;
+    const wrapStmt = (s: D1PreparedStatement): D1PreparedStatement =>
+      new Proxy(s, {
+        get(target, prop, recv) {
+          const v = Reflect.get(target, prop, recv);
+          if (prop === 'bind') return (...a: unknown[]) => wrapStmt((v as Function).apply(target, a));
+          if (prop === 'first' || prop === 'all' || prop === 'run' || prop === 'raw') return (...a: unknown[]) => (calls++, (v as Function).apply(target, a));
+          return typeof v === 'function' ? v.bind(target) : v;
+        },
+      });
+    const proxy = new Proxy(db, {
+      get(target, prop, recv) {
+        const v = Reflect.get(target, prop, recv);
+        if (prop === 'prepare') return (q: string) => wrapStmt(target.prepare(q));
+        if (prop === 'batch') return (st: D1PreparedStatement[]) => (calls++, target.batch(st.map((x) => ((x as any).__target ?? x))));
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    return { db: proxy, get calls() { return calls; } };
+  };
+
+  it('a 300-op push (creates, captures, moves, renames, folder delete) stays well under 50 D1 calls', async () => {
+    const c = counted(t.env.DB);
+    const env = { ...t.env, DB: c.db };
+    const callWith = async (path: string, body: unknown) => {
+      const res = await app.fetch(new Request(`http://local${path}`, { method: 'POST', headers: { authorization: `Bearer ${A.token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) }), env, {
+        waitUntil() {}, passThroughOnException() {}, props: {},
+      } as unknown as ExecutionContext);
+      return { status: res.status, json: (await res.json()) as any };
+    };
+    const ops: any[] = [{ op: 'create', clientRef: 'budget-f', kind: 'folder', parent: null, title: 'budget' }];
+    for (let i = 0; i < 150; i++) ops.push({ op: 'create', clientRef: `budget-${i}`, kind: 'bookmark', parent: { clientRef: 'budget-f' }, title: `b${i}`, url: `https://budget.example/${i}` });
+    for (let i = 0; i < 50; i++) ops.push({ op: 'create', clientRef: `capture:budget-${i}`, kind: 'bookmark', parent: null, autoCategorize: true, title: `c${i}`, url: `https://github.com/budget/${i}` });
+    const r = await callWith('/sync/push', { ops });
+    expect(r.status).toBe(200);
+    expect(r.json.results.filter((x: any) => x.status === 'applied')).toHaveLength(201);
+    const first = c.calls;
+    console.log(`[budget] push#1 D1 calls=${first}`);
+    expect(first).toBeLessThan(25);
+    await A.pull();
+    const folder = A.folder('budget');
+    const bms = [...A.nodes.values()].filter((n: any) => n.parentId === folder.id && !n.deleted).slice(0, 50);
+    const ops2: any[] = [
+      ...bms.slice(0, 25).map((n: any) => ({ op: 'update', id: n.id, baseRev: n.rev, title: n.title + '!' })),
+      ...bms.slice(25).map((n: any) => ({ op: 'move', id: n.id, baseRev: n.rev, parent: { serverId: A.folder('개발').id } })),
+      { op: 'delete', id: folder.id, baseRev: folder.rev },
+    ];
+    const r2 = await callWith('/sync/push', { ops: ops2, confirmMassDelete: true });
+    expect(r2.status).toBe(200);
+    expect(r2.json.results.every((x: any) => x.status === 'applied')).toBe(true);
+    console.log(`[budget] push#2 D1 calls=${c.calls - first}`);
+    expect(c.calls - first).toBeLessThan(25);
+    await A.pull();
+    expect([...A.nodes.values()].filter((n: any) => n.parentId === folder.id && !n.deleted)).toHaveLength(0);
+  });
+});
+
+describe('pull rev race (Should 4)', () => {
+  it('a write that lands while pull runs is not skipped by the next pull', async () => {
+    const store = new Store(t.DB);
+    const since = await store.currentRev();
+    const orig = store.currentRev.bind(store);
+    let injected = false;
+    store.currentRev = async () => {
+      const r = await orig();
+      if (!injected) {
+        injected = true; // pull 이 rev 를 읽은 직후 다른 기기가 쓴다
+        await store.write({ id: crypto.randomUUID(), kind: 'bookmark', parentId: null, title: 'race', url: 'https://race.example/', position: 0, deleted: false }, { op: 'create', deviceId: 'other', batchId: null, before: null });
+      }
+      return r;
+    };
+    const first = await pull(store, since);
+    expect(first.nodes.some((n) => n.url === 'https://race.example/')).toBe(false);
+    const second = await pull(new Store(t.DB), first.rev);
+    expect(second.nodes.some((n) => n.url === 'https://race.example/')).toBe(true);
   });
 });

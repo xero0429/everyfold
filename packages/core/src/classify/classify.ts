@@ -38,7 +38,7 @@ export function classifyByRules(item: ClassifyItem, ctx: ClassifyContext): Class
   if (learned && catIds.has(learned.categoryId)) return { itemId: item.id, categoryId: learned.categoryId, source: 'learned' };
   const hit = matchDomainRule(item.url, ctx.rules ?? BUILTIN_RULES);
   if (hit) {
-    const cat = ctx.categories.find((c) => c.name === hit.rule.category);
+    const cat = ctx.categories.find((c) => c.key === hit.rule.category) ?? ctx.categories.find((c) => c.id === hit.rule.category);
     if (cat) return { itemId: item.id, categoryId: cat.id, source: 'rule' };
   }
   return { itemId: item.id, categoryId: null, source: 'none' };

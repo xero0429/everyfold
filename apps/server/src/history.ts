@@ -89,6 +89,11 @@ export async function listChanges(store: Store, limit = 100) {
   return r.results;
 }
 
+/**
+ * batch 하나를 되돌린다 — 그 batch 가 건드린 노드마다 batch 직전 상태(가장 이른 before)를 "새 변경" 으로 쓴다.
+ * 의미: 노드 단위 덮어쓰기다. batch 뒤에 그 노드를 다른 기기가 또 바꿨다면 그 변경도 batch 직전 값으로 돌아간다
+ * (되돌리기 자체가 새 batch 라 그것도 다시 되돌릴 수 있다). batch 가 건드리지 않은 노드는 그대로 둔다.
+ */
 export async function undoBatch(store: Store, batchId: string, deviceId: string) {
   const rows = (await store.db.prepare(`SELECT rev, node_id, before_json, after_json FROM changes WHERE batch_id=? ORDER BY rev DESC`).bind(batchId).all<{ rev: number; node_id: string; before_json: string | null; after_json: string | null }>()).results;
   if (!rows.length) return null;
@@ -98,10 +103,11 @@ export async function undoBatch(store: Store, batchId: string, deviceId: string)
   // 같은 노드가 batch 안에서 여러 번 바뀌었으면 가장 이른 before 로 돌린다
   const earliest = new Map<string, { before: NodeState | null; after: NodeState }>();
   for (const r of rows) earliest.set(r.node_id, { before: r.before_json ? JSON.parse(r.before_json) : null, after: JSON.parse(r.after_json!) });
+  const current = new Map((await store.getMany([...earliest.keys()])).map((r) => [r.id, r]));
   for (const [nid, { before, after }] of earliest) {
     if (seen.has(nid)) continue;
     seen.add(nid);
-    const cur = await store.get(nid);
+    const cur = current.get(nid);
     const curState = cur ? rowToState(cur) : null;
     const target: NodeState = before ?? { ...after, deleted: true };
     if (curState && same(curState, target)) continue;
