@@ -91,6 +91,8 @@ describe('updateFromUpstream (git)', () => {
     expect(r.workflowsDiffer).toEqual(['.github/workflows/ci.yml']);
     expect(git(mine, 'status', '--porcelain')).toBe('');
     expect(git(mine, 'log', '--oneline').trim().split('\n')).toHaveLength(2);
+    expect(r.removed).toEqual(['old-file.txt']);
+    expect(logs).toContain('removed (no longer in upstream): old-file.txt');
 
     // 한 번 더 = 바뀐 것 없음
     const again = updateFromUpstream({ upstream: up, ref: 'main', cwd: mine, log: () => undefined });
@@ -111,5 +113,57 @@ describe('updateFromUpstream (git)', () => {
 
     writeFileSync(join(mine, 'apps/server/src/index.ts'), 'local edit\n');
     expect(() => updateFromUpstream({ upstream: up, ref: 'main', cwd: mine, log: () => undefined })).toThrow(/uncommitted/);
+  });
+
+  it('warns about wrangler.toml edits it drops (e.g. [vars])', () => {
+    const m = initRepo('mine-vars', { ...v1, 'wrangler.toml': `${deployed(repoToml)}\n[vars]\nLOCALE = "ko"\n` });
+    const logs = [];
+    const r = updateFromUpstream({ upstream: up, ref: 'main', cwd: m, log: (s) => logs.push(s) });
+    expect(r.dropped).toEqual(expect.arrayContaining(['[vars]', 'LOCALE = "ko"']));
+    expect(logs.some((l) => l.startsWith('warning:') && l.includes('LOCALE = "ko"'))).toBe(true);
+    expect(readFileSync(join(m, 'wrangler.toml'), 'utf8')).toContain('database_id = "1111-2222"');
+  });
+});
+
+// fail-closed: 내 배포 값을 지킬 수 없으면 아무것도 바꾸지 않고 멈춘다
+describe('updateFromUpstream refuses when it cannot keep the deploy values', () => {
+  const base = { 'apps/server/src/index.ts': 'v1\n', 'README.md': 'r\n' };
+  const untouched = (d, head) => {
+    expect(git(d, 'rev-parse', 'HEAD')).toBe(head);
+    expect(git(d, 'status', '--porcelain')).toBe('');
+  };
+
+  it('wrangler.toml missing / wrangler.json(c) present → throws, nothing changed', () => {
+    const up = initRepo('up-json', { ...base, 'wrangler.toml': repoToml, 'apps/server/src/index.ts': 'v2\n' });
+    const jsonc = '{ "name": "my-bookmarks", "d1_databases": [{ "binding": "DB", "database_name": "x", "database_id": "1111-2222" }] }\n';
+    const m = initRepo('mine-jsonc', { ...base, 'wrangler.jsonc': jsonc });
+    const head = git(m, 'rev-parse', 'HEAD');
+    expect(() => updateFromUpstream({ upstream: up, ref: 'main', cwd: m, log: () => undefined })).toThrow(/wrangler\.jsonc.*update by hand/);
+    untouched(m, head);
+    expect(readFileSync(join(m, 'wrangler.jsonc'), 'utf8')).toBe(jsonc);
+    expect(existsSync(join(m, 'wrangler.toml'))).toBe(false);
+
+    // toml 과 json 이 같이 있어도 멈춘다
+    const both = initRepo('mine-both', { ...base, 'wrangler.toml': deployed(repoToml), 'wrangler.json': '{}\n' });
+    const head2 = git(both, 'rev-parse', 'HEAD');
+    expect(() => updateFromUpstream({ upstream: up, ref: 'main', cwd: both, log: () => undefined })).toThrow(/wrangler\.json/);
+    untouched(both, head2);
+
+    // 설정 파일이 아예 없어도 멈춘다
+    const none = initRepo('mine-none', base);
+    const head3 = git(none, 'rev-parse', 'HEAD');
+    expect(() => updateFromUpstream({ upstream: up, ref: 'main', cwd: none, log: () => undefined })).toThrow(/wrangler\.toml not found/);
+    untouched(none, head3);
+  });
+
+  it('my database_id would be lost (upstream changed the D1 block) → throws, nothing changed', () => {
+    // upstream 이 바인딩 이름을 바꿔 내 [[d1_databases]] DB 를 찾을 수 없는 경우
+    const up = initRepo('up-nodb', { ...base, 'wrangler.toml': repoToml.replace('binding = "DB"', 'binding = "STORE"'), 'apps/server/src/index.ts': 'v2\n' });
+    const m = initRepo('mine-id', { ...base, 'wrangler.toml': deployed(repoToml) });
+    const head = git(m, 'rev-parse', 'HEAD');
+    expect(() => updateFromUpstream({ upstream: up, ref: 'main', cwd: m, log: () => undefined })).toThrow(/database_id "1111-2222"/);
+    untouched(m, head);
+    expect(readFileSync(join(m, 'apps/server/src/index.ts'), 'utf8')).toBe('v1\n');
+    expect(readFileSync(join(m, 'wrangler.toml'), 'utf8')).toBe(deployed(repoToml));
   });
 });

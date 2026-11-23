@@ -8,7 +8,7 @@ Order (owner decision 2026-11-23): **① Deploy button test → ② public repos
 
 - [ ] `pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build:extension` pass; `pnpm --filter @everyfold/extension e2e` passes.
 - [ ] No secrets in history (`git log -p | grep -iE 'sk-ant|ADMIN_TOKEN=.+'` finds nothing but examples). `.dev.vars` is git-ignored.
-- [ ] `docs/demo.gif` exists (README references it) or the image line is removed.
+- [ ] Optional: add `docs/demo.gif` and put `![Everyfold demo](docs/demo.gif)` back at the top of README.md / README.ko.md (the line was removed so the public page has no broken image).
 - [ ] **[owner]** Make `github.com/xero0429/everyfold` public — the Deploy button only works on public repositories (so step ① needs the repository public, or a temporary public test copy).
 - [ ] **[owner]** Release zips: on `main`, `git tag v0.1.0 && git push origin v0.1.0`. `.github/workflows/release.yml` runs typecheck + tests, checks the tag equals the server/extension versions, runs `pnpm package:extension` and creates the GitHub Release with `everyfold-chrome-*.zip`, `everyfold-firefox-*.zip`, `everyfold-source-*.zip` and `SHA256SUMS.txt`.
 - [ ] Follow README *Install the extension* on a clean Chrome profile with the downloaded zip (Load unpacked → connect → sync), then the update steps (unzip the same zip over the folder → reload) and check the connection survived.
@@ -31,6 +31,8 @@ Run it for real:
 - [ ] Open the README button in a private window, logged in to a test Cloudflare account and GitHub.
 - [ ] The form shows the D1 database, `ADMIN_TOKEN` (required) and `ANTHROPIC_API_KEY` (optional) with their descriptions. Note whether leaving `ANTHROPIC_API_KEY` empty is accepted; if the form insists on a value, document "enter `-`"/remove it from `.dev.vars.example` and describe it only in the README.
 - [ ] Workers Builds detects pnpm (from `pnpm-lock.yaml` / `packageManager`) and the deploy command is `pnpm run deploy` (or `npm run deploy`). The build log shows `Migrations to be applied: 0001_init.sql, 0002_category_keys.sql` then a successful deploy. Wrangler skips the "Ok to proceed?" prompt when it is not attached to a terminal (CI); if the build hangs or fails at that step, record the log and fix the `deploy` script.
+- [ ] The new repo contains `.github/workflows/update-from-upstream.yml` (the docs don't say whether the Cloudflare GitHub App copies workflow files — without it there is no update path; if missing, document adding it by hand in the README).
+- [ ] The new repo's Wrangler config is still **one `wrangler.toml`** (no `wrangler.json`/`wrangler.jsonc` written by Cloudflare). The update script stops if not, so if Cloudflare switches format the README update path must change.
 - [ ] In the new repo, `wrangler.toml` now has a `database_id` (committed by Cloudflare) — confirm `scripts/update-from-upstream.mjs` keeps it (it carries `name`, `database_name`, `database_id`).
 - [ ] `curl https://<worker>/version` → `{"service":"everyfold","version":"0.1.0","api":1,"minClientApi":1}`.
 - [ ] Connect a browser with the admin token; first sync works.

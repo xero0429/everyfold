@@ -6,7 +6,6 @@ Everyfold — one bookmark library for every browser, auto-organized.
 [English](README.md) · [한국어](README.ko.md)
 
 <!-- TODO: demo GIF (connect two browsers → bookmark in one → appears categorized in the other) -->
-![Everyfold demo](docs/demo.gif)
 
 Everyfold keeps **one bookmark library on your own free Cloudflare Worker** (one-click deploy from GitHub) and mirrors it into an `Everyfold` folder in every browser you connect (Chrome and Firefox today). New bookmarks are sorted into category folders automatically — by built-in domain rules, by what you've taught it, and optionally by an LLM.
 
@@ -102,7 +101,7 @@ The extension checks your server's version (`GET /version`) when it connects and
 Because the Deploy button made a *copy* of this repository (not a fork), GitHub's *Sync fork* button is not available. Use the included workflow instead:
 
 1. Open your copy on GitHub → **Actions** → **Update from upstream** → **Run workflow** (branch `main`, upstream ref `main` or a release tag). The first time, GitHub may ask you to enable Actions for the repository.
-2. The workflow commits the latest Everyfold code to your repository. It keeps your Worker name and your D1 `database_name` / `database_id` from `wrangler.toml`, and leaves `.github/workflows/` alone (it lists any workflow files that differ from upstream; update those by hand if you want them).
+2. The workflow commits the latest Everyfold code to your repository. It keeps your Worker name and your D1 `database_name` / `database_id` from `wrangler.toml`, and leaves `.github/workflows/` alone (it lists any workflow files that differ from upstream; update those by hand if you want them). It also logs the files it removed and any lines of your `wrangler.toml` it did not keep (put variables in the Cloudflare dashboard, not in `wrangler.toml`). If it cannot keep your settings safely — no `wrangler.toml`, a `wrangler.json`/`wrangler.jsonc` instead, or your `database_id` would be lost — it stops without changing anything; then update by hand with the merge below.
 3. Workers Builds sees the push and redeploys. The `deploy` script applies new D1 migrations first, so the database schema is updated along with the code. Check the build under *Workers & Pages → everyfold → Deployments* in the Cloudflare dashboard.
 
 Want automatic updates? Uncomment the `schedule:` lines in `.github/workflows/update-from-upstream.yml`.
