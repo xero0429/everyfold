@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE xbel PUBLIC "+//IDN python.org//DTD XML Bookmark Exchange Language 1.0//EN//XML" "http://pyxml.sourceforge.net/topics/dtds/xbel.dtd">
+<xbel version="1.0">
+<!--- highestId :9: for Floccus bookmark sync browser extension -->
+
+<folder id="1">
+  <title>Development</title>
+  <bookmark href="https://developer.mozilla.org/en-US/docs/Web/JavaScript" id="2">
+    <title>JavaScript | MDN</title>
+  </bookmark>
+  <folder id="3">
+    <title>Tools &amp; Libraries</title>
+    <bookmark href="https://www.typescriptlang.org/docs/" id="4">
+      <title>TypeScript Documentation</title>
+    </bookmark>
+    <bookmark href="https://example.com/search?q=xbel&amp;lang=en" id="5">
+      <title>Search: &quot;xbel&quot;</title>
+    </bookmark>
+  </folder>
+</folder>
+<folder id="6">
+  <title>Reading</title>
+  <bookmark href="https://developer.mozilla.org/en-US/docs/Web/JavaScript" id="7">
+    <title>MDN JavaScript (duplicate)</title>
+  </bookmark>
+  <bookmark href="https://example.org/articles/bookmark-sync" id="8">
+    <title></title>
+  </bookmark>
+</folder>
+<bookmark href="https://example.net/" id="9">
+  <title>Top-level bookmark</title>
+</bookmark>
+</xbel>

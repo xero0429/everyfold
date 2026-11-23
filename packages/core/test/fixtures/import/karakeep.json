@@ -1,0 +1,12 @@
+{
+  "bookmarks": [
+    { "createdAt": 1700000000, "title": "JavaScript | MDN", "tags": ["js", "docs"], "lists": ["l_dev"], "content": { "type": "link", "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript" }, "note": null, "archived": false },
+    { "createdAt": 1700000100, "title": null, "tags": [], "lists": ["l_tools"], "content": { "type": "link", "url": "https://www.typescriptlang.org/docs/" }, "note": "TS handbook", "archived": false },
+    { "createdAt": 1700000200, "title": "Groceries", "tags": [], "lists": [], "content": { "type": "text", "text": "milk, eggs" }, "note": null, "archived": false },
+    { "createdAt": 1700000300, "title": "Top-level bookmark", "tags": [], "content": { "type": "link", "url": "https://example.net/" }, "note": null, "archived": true }
+  ],
+  "lists": [
+    { "id": "l_dev", "name": "Development", "description": null, "icon": "💻", "type": "manual", "query": null, "parentId": null },
+    { "id": "l_tools", "name": "Tools & Libraries", "description": null, "icon": "🔧", "type": "manual", "query": null, "parentId": "l_dev" }
+  ]
+}

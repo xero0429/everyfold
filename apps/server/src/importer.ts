@@ -1,4 +1,4 @@
-import { flattenBookmarks, groupDuplicates, parseNetscapeHtml } from '@everyfold/core';
+import { flattenBookmarks, groupDuplicates, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
 import { Store, type NodeState } from './store.js';
 import { addNewCategorySuggestion, classifyWithContext } from './categorize.js';
 import type { Env } from './env.js';
@@ -27,9 +27,19 @@ export interface ImportResult {
  * 1) 파일 안 중복 합치기 2) 서버에 이미 있는 것 합치기 3) 나머지 분류 → 카테고리 폴더에 생성.
  * 모든 생성은 한 batchId 로 묶여 /changes/undo 로 통째 되돌릴 수 있다.
  */
-export async function importItems(store: Store, env: Env, deviceId: string, input: { html?: string; items?: ImportItem[] }): Promise<ImportResult> {
+export class UnknownFormatError extends Error {}
+
+export async function importItems(
+  store: Store, env: Env, deviceId: string, input: { html?: string; file?: string; format?: ImportFormat; items?: ImportItem[] },
+): Promise<ImportResult> {
   let items: ImportItem[] = [];
   if (typeof input.html === 'string') items = flattenBookmarks(parseNetscapeHtml(input.html).root);
+  if (typeof input.file === 'string') {
+    // 다른 도구 내보내기: Netscape HTML · Floccus XBEL · Karakeep JSON · Linkwarden JSON · Raindrop CSV
+    const parsed = parseImportFile(input.file, input.format);
+    if (!parsed) throw new UnknownFormatError('unknown_format');
+    items = items.concat(parsed.items);
+  }
   if (Array.isArray(input.items)) items = items.concat(input.items.filter((i) => i && typeof i.url === 'string'));
   const received = items.length;
 

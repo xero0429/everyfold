@@ -1,0 +1,15 @@
+{
+  "name": "Sample", "username": "sample", "locale": "en",
+  "collections": [
+    { "id": 1, "name": "Development", "description": "", "color": "#0ea5e9", "parentId": null, "isPublic": false, "ownerId": 7, "rssSubscriptions": [],
+      "links": [
+        { "id": 10, "name": "JavaScript | MDN", "type": "url", "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript", "collectionId": 1, "description": "", "createdAt": "2023-11-14T22:13:20.000Z", "tags": [{ "id": 3, "name": "js", "ownerId": 7 }] }
+      ] },
+    { "id": 2, "name": "Tools & Libraries", "description": "", "color": "#0ea5e9", "parentId": 1, "isPublic": false, "ownerId": 7, "rssSubscriptions": [],
+      "links": [
+        { "id": 11, "name": "", "type": "url", "url": "https://www.typescriptlang.org/docs/", "collectionId": 2, "description": "TS handbook", "createdAt": "2023-11-14T22:15:00.000Z", "tags": [] },
+        { "id": 12, "name": "Scanned PDF", "type": "pdf", "url": null, "collectionId": 2, "description": "", "createdAt": "2023-11-14T22:16:00.000Z", "tags": [] }
+      ] }
+  ],
+  "pinnedLinks": []
+}

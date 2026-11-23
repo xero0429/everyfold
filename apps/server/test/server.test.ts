@@ -245,6 +245,23 @@ describe('import + categorize + suggestions', () => {
     expect(again.json).toMatchObject({ created: 0, mergedExisting: 5 });
   });
 
+  it('imports other tools\' exports (XBEL / Karakeep / Linkwarden / Raindrop CSV) and rejects unknown', async () => {
+    const fx = (n: string) => readFileSync(fileURLToPath(new URL(`../../../packages/core/test/fixtures/import/${n}`, import.meta.url)), 'utf8');
+    const xbel = await t.call('POST', '/import', { token: A.token, raw: fx('floccus.xbel') });
+    expect(xbel.status).toBe(200);
+    expect(xbel.json).toMatchObject({ received: 6, mergedInFile: 1 });
+    const kk = await t.call('POST', '/import', { token: A.token, body: { file: fx('karakeep.json') } });
+    expect(kk.status).toBe(200);
+    expect(kk.json.received).toBe(3);
+    const lw = await t.call('POST', '/import', { token: A.token, body: { file: fx('linkwarden.json'), format: 'linkwarden' } });
+    expect(lw.json).toMatchObject({ received: 2, created: 0 }); // 둘 다 위에서 이미 들어옴
+    const rd = await t.call('POST', '/import', { token: A.token, raw: fx('raindrop.csv') });
+    expect(rd.json).toMatchObject({ received: 3, created: 0 });
+    const bad = await t.call('POST', '/import', { token: A.token, raw: 'hello world' });
+    expect(bad.status).toBe(400);
+    expect(bad.json.error).toBe('unknown_format');
+  });
+
   it('autoCategorize puts captured bookmarks in a category', async () => {
     await A.pull();
     const r = await A.push([{ op: 'create', clientRef: 'cap', kind: 'bookmark', parent: null, autoCategorize: true, title: 'Coupang', url: 'https://www.coupang.com/np/search?q=x' }]);

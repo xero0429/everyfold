@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   BUILTIN_RULES, classifyByRules, classifyItems, learnRules, matchDomainRule, matchLearned, sanitizeDecisions,
   type LlmCategorizer,
+  type LlmItem,
 } from '../src/index.js';
 import { AnthropicCategorizer } from '../src/classify/anthropic.js';
 
@@ -69,7 +70,7 @@ describe('LLM step', () => {
   it('only unresolved items go to LLM; new categories are suggestions only', async () => {
     const llm: LlmCategorizer = {
       name: 'fake',
-      categorize: vi.fn(async (batch) => {
+      categorize: vi.fn(async (batch: readonly LlmItem[]) => {
         expect(batch.map((b) => b.id)).toEqual(['i2', 'i3', 'i4']);
         return [{ itemId: 'i2', categoryId: 'c-cook' }, { itemId: 'i3', newCategory: '원예' }, { itemId: 'i4', skip: true as const }];
       }),

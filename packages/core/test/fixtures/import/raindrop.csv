@@ -1,0 +1,6 @@
+id,title,note,excerpt,url,folder,tags,created,cover,highlights,favorite
+1,"JavaScript | MDN",,,https://developer.mozilla.org/en-US/docs/Web/JavaScript,Development,"js, docs",2023-11-14T22:13:20.000Z,,,false
+2,"Search: ""xbel""","multi
+line note",,https://example.com/search?q=xbel&lang=en,Development/Tools & Libraries,,1700000100,,,true
+3,,,,https://example.net/,Unsorted,,2023-11-14T22:20:00.000Z,,,false
+4,"not a link",,,,Development,,,,,false

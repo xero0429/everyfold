@@ -93,6 +93,7 @@ export type Msg =
   | { type: 'confirmMassDelete' }
   | { type: 'restoreMassDelete' }
   | { type: 'suggestions' }
+  | { type: 'importFile'; text: string }
   | { type: 'decide'; id: string; approve: boolean };
 
 function status() {
@@ -124,6 +125,11 @@ async function handle(m: Msg): Promise<unknown> {
         const r = await engine.restorePendingDeletes();
         await badge(r);
         return { ...r, status: status() };
+      }
+      case 'importFile': {
+        const r = await engine.api('POST', '/import', { file: m.text });
+        await runSync();
+        return r;
       }
       case 'suggestions':
         return await engine.api('GET', '/suggestions');

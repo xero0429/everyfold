@@ -89,6 +89,14 @@ try {
   await popup.click('#syncNow');
   await waitFor(async () => (await sw.evaluate(() => chrome.bookmarks.search({ url: 'https://news.ycombinator.com/' }))).length > 0, 'pulled bookmark in browser');
   step('OK server bookmark appeared in browser');
+
+  step('import a Raindrop CSV from the popup');
+  await popup.setInputFiles('#importFile', join(here, '..', '..', '..', 'packages', 'core', 'test', 'fixtures', 'import', 'raindrop.csv'));
+  await popup.waitForFunction(() => /^Imported|failed/.test(document.getElementById('importResult')?.textContent ?? ''), null, { timeout: 20000 });
+  const msg = await popup.textContent('#importResult');
+  if (!/^Imported 3/.test(msg ?? '')) throw new Error('popup import: ' + msg);
+  await waitFor(async () => (await sw.evaluate(() => chrome.bookmarks.search({ url: 'https://example.net/' }))).length > 0, 'imported bookmark in browser');
+  step(`OK ${msg}`);
   console.log('[e2e] PASS');
 } catch (e) {
   console.error('[e2e] FAIL', e);

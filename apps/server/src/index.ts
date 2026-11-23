@@ -6,7 +6,7 @@ import { newDeviceToken, requireAdmin, requireDevice, sha256Hex } from './auth.j
 import { Store } from './store.js';
 import { MassDeleteBlocked, pull, push } from './sync.js';
 import { ensureSeeded } from './categorize.js';
-import { importItems } from './importer.js';
+import { importItems, UnknownFormatError } from './importer.js';
 import { createSnapshot, ensureDailySnapshot, listChanges, listSnapshots, restoreSnapshot, undoBatch } from './history.js';
 import { decideSuggestion, generateSuggestions, listSuggestions } from './suggestions.js';
 
@@ -74,11 +74,24 @@ api.get('/sync/mappings', async (c) => {
 
 api.post('/import', async (c) => {
   const ct = c.req.header('content-type') ?? '';
-  const body = ct.includes('application/json')
-    ? await c.req.json<{ html?: string; items?: [] }>().catch(() => null)
-    : { html: await c.req.text() };
+  // JSON 본문 { items } | { html } | { file, format? } — 아니면 본문 전체를 내보내기 파일로 보고 형식을 알아낸다
+  const raw = await c.req.text();
+  let body: Parameters<typeof importItems>[3] | null = null;
+  if (ct.includes('application/json')) {
+    try {
+      const j = JSON.parse(raw);
+      body = j && (typeof j.html === 'string' || typeof j.file === 'string' || Array.isArray(j.items)) ? j : { file: raw };
+    } catch {
+      body = null;
+    }
+  } else body = { file: raw };
   if (!body) return c.json({ error: 'bad_request' }, 400);
-  return c.json(await importItems(new Store(c.env.DB), c.env, c.get('device').id, body));
+  try {
+    return c.json(await importItems(new Store(c.env.DB), c.env, c.get('device').id, body));
+  } catch (e) {
+    if (e instanceof UnknownFormatError) return c.json({ error: 'unknown_format' }, 400);
+    throw e;
+  }
 });
 
 api.get('/categories', async (c) => {
