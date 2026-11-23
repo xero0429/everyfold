@@ -18,5 +18,9 @@
     "typescript": "^5.9.3",
     "vitest": "^3.2.4",
     "wrangler": "4.166.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./test/helpers.ts"
   }
 }

@@ -15,6 +15,40 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7
 
+  apps/extension:
+    dependencies:
+      '@everyfold/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      webextension-polyfill:
+        specifier: ^0.12.0
+        version: 0.12.0
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20261123.1
+        version: 5.20261123.1
+      '@everyfold/server':
+        specifier: workspace:*
+        version: link:../server
+      '@types/webextension-polyfill':
+        specifier: ^0.12.6
+        version: 0.12.6
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      playwright-core:
+        specifier: ^1.65.1
+        version: 1.65.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7
+      wrangler:
+        specifier: 4.166.0
+        version: 4.166.0(@cloudflare/workers-types@5.20261123.1)(vitest@3.2.7)
+
   apps/server:
     dependencies:
       '@everyfold/core':
@@ -606,6 +640,9 @@ packages:
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
 
+  '@types/webextension-polyfill@0.12.6':
+    resolution: {integrity: sha512-XTNQSGiQaipt1iocbpHSjYHd+Ujcya+K5H4H2uH7JwycReTFixoYqGWIKih2Ec072NuEW2lAyXRDYmlEx00+cw==}
+
   '@types/yargs-parser@21.0.3':
     resolution: {integrity: sha512-I4q9QU9MQv4oEOz4tAHJtNz1cwuLxn2F3xcc2iV5WdqLPpUnj30aUuxt1mAxYTG+oe8CZMV/+6rU4S4gRDzqtQ==}
 
@@ -896,6 +933,11 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
+  playwright-core@1.65.1:
+    resolution: {integrity: sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   postcss@8.5.33:
     resolution: {integrity: sha512-RVHEU9/Pp1Fnjr/MpAJsZoADukCKhfIi15OunEYiGktIkYLkPVvC1sioWolGDS7XByMTx9m/IGbro0Js13zhnQ==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1064,6 +1106,9 @@ packages:
   web-streams-polyfill@4.0.0-beta.3:
     resolution: {integrity: sha512-QW95TCTaHmsYfHDybGMwO5IJIM93I/6vTRk+daHTWFPhwh+C8Cg7j7XyKrwrj8Ib6vYXe0ocYNrmzY4xAAN6ug==}
     engines: {node: '>= 14'}
+
+  webextension-polyfill@0.12.0:
+    resolution: {integrity: sha512-97TBmpoWJEE+3nFBQ4VocyCdLKfw54rFaJ6EVQYLBCXqCIpLSZkwGgASpv4oPt9gdKCJ80RJlcmNzNn008Ag6Q==}
 
   webidl-conversions@3.0.1:
     resolution: {integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==}
@@ -1471,6 +1516,8 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
+  '@types/webextension-polyfill@0.12.6': {}
+
   '@types/yargs-parser@21.0.3': {}
 
   '@types/yargs@17.0.24':
@@ -1762,6 +1809,8 @@ snapshots:
 
   picomatch@4.0.7: {}
 
+  playwright-core@1.65.1: {}
+
   postcss@8.5.33:
     dependencies:
       nanoid: 3.3.20
@@ -1957,6 +2006,8 @@ snapshots:
       - yaml
 
   web-streams-polyfill@4.0.0-beta.3: {}
+
+  webextension-polyfill@0.12.0: {}
 
   webidl-conversions@3.0.1: {}
 
