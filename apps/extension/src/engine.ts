@@ -1,5 +1,5 @@
 import {
-  BRAND, isMassDelete, type MassDeleteError, type NodeRef, type PullResponse, type PushResponse, type ServerNode, type SyncOp,
+  BRAND, isMassDelete, normalizeUrl, type MassDeleteError, type NodeRef, type PullResponse, type PushResponse, type ServerNode, type SyncOp,
 } from '@everyfold/core';
 
 /**
@@ -46,6 +46,8 @@ export interface ShadowEntry {
   title: string;
   url: string | null;
   rev: number;
+  /** Move 모드 capture: 원본이 아직 루트 밖에 있다(다음 pull 이 카테고리 폴더로 옮긴다) — diff 가 삭제로 보지 않게 */
+  pendingMove?: boolean;
 }
 
 export interface EngineState {
@@ -62,7 +64,13 @@ export interface EngineState {
   lastImport: { created: number; mergedExisting: number; mergedInFile: number } | null;
   pendingMassDelete: { ops: SyncOp[]; deletes: number; live: number; at: number } | null;
   pendingMappings: Array<{ browserId: string; serverId: string }>;
-  captures: Array<{ browserId: string; url: string; title: string }>;
+  captures: Array<{ browserId: string; url: string; title: string; parentId?: string; index?: number }>;
+  /** 설정(기기별): 루트 밖에서 새로 만든 북마크를 Everyfold 로 "옮긴다"(꺼져 있으면 복사) */
+  moveCaptures: boolean;
+  /** 첫 연결 뒤 "옮기기를 켤 수 있어요" 안내를 닫았는지 */
+  moveHintDismissed: boolean;
+  /** 옮긴 capture 의 원래 자리(serverId → 부모·순서). 서버에서 되돌리기(undo)로 지워지면 지우지 않고 원래 자리로 돌려놓는다 */
+  movedOrigins: Record<string, { parentId: string; index?: number }>;
   /** 이 브라우저에 쓰지 못한 서버 노드(serverId → 마지막 서버 상태·이유). 다음 sync 에 다시 시도한다(상한 MAX_APPLY_ATTEMPTS). */
   failed: Record<string, FailedApply>;
 }
@@ -80,6 +88,7 @@ export const MAX_APPLY_ATTEMPTS = 5;
 export const emptyState = (): EngineState => ({
   serverUrl: null, token: null, deviceName: null, rev: 0, rootId: null, shadow: {}, map: {}, initialUploadDone: false,
   lastSyncAt: null, lastError: null, lastImport: null, pendingMassDelete: null, pendingMappings: [], captures: [], failed: {},
+  moveCaptures: false, moveHintDismissed: false, movedOrigins: {},
 });
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -104,6 +113,10 @@ export class SyncEngine {
   state: EngineState = emptyState();
   /** 원격 변경을 브라우저에 쓰는 중이면 true — 이벤트 핸들러가 이 동안의 이벤트를 무시한다 */
   applying = false;
+  /** push 에서 merged 로 돌아온 서버 노드 — 같은 sync 의 pull 단계에서 브라우저를 서버 제목·위치로 맞춘다 */
+  private mergedNodes: ServerNode[] = [];
+  /** pull 한 번 동안의 브라우저 폴더 자식 캐시(채택 검색용) */
+  private childCache = new Map<string, BNode[]>();
   private running: Promise<unknown> = Promise.resolve();
 
   constructor(readonly bm: BookmarksApi, readonly kv: KV, readonly fetchImpl: Fetch, readonly now: () => number = Date.now) {}
@@ -139,7 +152,10 @@ export class SyncEngine {
 
   /** 관리자 토큰으로 이 기기를 등록한다. 관리자 토큰은 저장하지 않는다. */
   async connect(serverUrl: string, opts: { adminToken?: string; deviceToken?: string; deviceName: string }) {
-    this.state = { ...emptyState(), serverUrl: serverUrl.trim().replace(/\/+$/, ''), deviceName: opts.deviceName, rootId: this.state.rootId };
+    this.state = {
+      ...emptyState(), serverUrl: serverUrl.trim().replace(/\/+$/, ''), deviceName: opts.deviceName, rootId: this.state.rootId,
+      moveCaptures: this.state.moveCaptures, moveHintDismissed: this.state.moveHintDismissed,
+    };
     if (opts.deviceToken) {
       this.state.token = opts.deviceToken.trim();
       await this.api('GET', '/me');
@@ -202,7 +218,7 @@ export class SyncEngine {
   async noteCreated(node: BNode) {
     if (this.applying || !node.url || !this.state.initialUploadDone) return;
     if (await this.isInsideRoot(node.id)) return;
-    this.state.captures.push({ browserId: node.id, url: node.url, title: node.title });
+    this.state.captures.push({ browserId: node.id, url: node.url, title: node.title, ...(node.parentId ? { parentId: node.parentId } : {}), ...(node.index !== undefined ? { index: node.index } : {}) });
     await this.save();
   }
 
@@ -251,7 +267,7 @@ export class SyncEngine {
       }
     };
     if (root) walk(root, null);
-    const gone = Object.entries(this.state.shadow).filter(([sid, e]) => !seen.has(sid) && e.rev !== -1);
+    const gone = Object.entries(this.state.shadow).filter(([sid, e]) => !seen.has(sid) && e.rev !== -1 && !e.pendingMove);
     const goneIds = new Set(gone.map(([sid]) => sid));
     // 부모 폴더째 지워졌으면 부모만 보낸다(서버가 하위까지 지운다)
     const deletes: SyncOp[] = gone
@@ -291,7 +307,10 @@ export class SyncEngine {
 
       // 수집(capture): 루트 밖에서 새로 만든 북마크
       const captures = this.state.captures.splice(0);
-      const ops: SyncOp[] = captures.map((c) => ({ op: 'create', clientRef: `capture:${c.browserId}`, kind: 'bookmark', parent: null, autoCategorize: true, title: c.title, url: c.url }));
+      // Move 모드면 clientRef 를 move: 로 — 결과가 오면 원본을 매핑해 pull 이 카테고리 폴더로 옮기게 한다
+      const prefix = this.state.moveCaptures ? 'move' : 'capture';
+      const captureInfo = new Map(captures.map((c) => [`${prefix}:${c.browserId}`, c]));
+      const ops: SyncOp[] = captures.map((c) => ({ op: 'create', clientRef: `${prefix}:${c.browserId}`, kind: 'bookmark', parent: null, autoCategorize: true, title: c.title, url: c.url }));
 
       const local = this.state.rev > 0 || Object.keys(this.state.shadow).length ? await this.diff(rootId) : [];
       const { deletes, live } = this.localBookmarkDeletes(local);
@@ -307,13 +326,13 @@ export class SyncEngine {
       }
 
       if (ops.length || this.state.pendingMappings.length) {
-        const pushRes = await this.pushOps(ops, confirm);
+        const pushRes = await this.pushOps(ops, confirm, captureInfo);
         if ('error' in pushRes) {
           report.blocked = pushRes;
           this.state.pendingMassDelete = { ops: ops.filter((o) => o.op === 'delete'), deletes: pushRes.deletes, live: pushRes.liveBookmarks, at: this.now() };
           // 생성·수정만 다시 보낸다
           const rest = ops.filter((o) => o.op !== 'delete');
-          if (rest.length) await this.pushOps(rest, false);
+          if (rest.length) await this.pushOps(rest, false, captureInfo);
         }
         report.pushed = ops.length;
       }
@@ -334,7 +353,9 @@ export class SyncEngine {
     }
   }
 
-  private async pushOps(ops: SyncOp[], confirmMassDelete: boolean): Promise<PushResponse | MassDeleteError> {
+  private async pushOps(
+    ops: SyncOp[], confirmMassDelete: boolean, captureInfo: Map<string, EngineState['captures'][number]> = new Map(),
+  ): Promise<PushResponse | MassDeleteError> {
     const mappings = this.state.pendingMappings.splice(0);
     let res: PushResponse;
     try {
@@ -349,6 +370,15 @@ export class SyncEngine {
       const op = ops[r.index]!;
       if (op.op === 'create') {
         if (!r.serverId || op.clientRef.startsWith('capture:')) continue;
+        if (op.clientRef.startsWith('move:')) {
+          // 새로 만든 북마크만 옮긴다. 이미 라이브러리에 있던 것(merged)은 원본을 건드리지 않는다.
+          const c = captureInfo.get(op.clientRef);
+          if (r.status !== 'applied' || !c) continue;
+          this.state.map[c.browserId] = r.serverId;
+          this.state.shadow[r.serverId] = { b: c.browserId, kind: 'bookmark', parent: null, title: op.title, url: op.url ?? null, rev: 0, pendingMove: true };
+          if (c.parentId) this.state.movedOrigins[r.serverId] = { parentId: c.parentId, ...(c.index !== undefined ? { index: c.index } : {}) };
+          continue;
+        }
         const browserId = op.clientRef;
         const prevB = this.state.shadow[r.serverId]?.b;
         if (prevB && prevB !== browserId) {
@@ -363,10 +393,12 @@ export class SyncEngine {
         }
         this.state.map[browserId] = r.serverId;
         const parent = op.parent === null ? null : 'serverId' in op.parent ? op.parent.serverId : this.state.map[op.parent.clientRef] ?? null;
-        // merged 이면 서버 쪽 제목·위치가 다를 수 있다 → rev 0 으로 두어 다음 pull 에서 그대로 맞춘다
         this.state.shadow[r.serverId] = { b: browserId, kind: op.kind, parent, title: op.title, url: op.url ?? null, rev: r.status === 'merged' ? 0 : r.rev ?? 0 };
+        // merged 면 서버 쪽 제목·위치가 다를 수 있다 → 서버 노드를 이번 pull 에서 그대로 적용한다(제목 불일치가 남지 않게)
+        if (r.status === 'merged' && r.node) this.mergedNodes.push(r.node);
       } else if (op.op === 'delete') {
         if (r.status === 'applied' || r.status === 'noop') {
+          delete this.state.movedOrigins[op.id];
           const e = this.state.shadow[op.id];
           if (e) delete this.state.map[e.b];
           this.dropShadowTree(op.id);
@@ -449,6 +481,8 @@ export class SyncEngine {
       if (this.state.failed[n.id] && this.state.failed[n.id]!.node.rev !== n.rev) this.state.failed[n.id]!.attempts = 0; // 서버에서 바뀌었다 → 다시 센다
       latest.set(n.id, n);
     }
+    for (const n of this.mergedNodes.splice(0)) if (!latest.has(n.id) || latest.get(n.id)!.rev < n.rev) latest.set(n.id, n);
+    this.childCache.clear();
     // 노드 하나가 실패해도(브라우저가 URL 을 거부·적용 중 사용자가 지움 등) 나머지는 계속 쓰고 rev 는 전진한다
     const attempt = async (n: ServerNode, asRoot = false): Promise<'changed' | 'same' | 'defer' | 'failed'> => {
       if (asRoot && n.parentId && this.state.failed[n.parentId]) return this.fail(n, 'parent folder could not be written');
@@ -517,7 +551,13 @@ export class SyncEngine {
       if (bid) b = await this.exists(bid);
     }
     if (n.deleted) {
-      if (b) await this.bm.removeTree(b.id);
+      const origin = this.state.movedOrigins[n.id];
+      if (b && origin && b.url) {
+        // Move 모드로 옮겨 온 원본 — 서버에서 지워졌으면(되돌리기 포함) 지우지 않고 원래 자리로 돌려놓는다
+        const back = await this.bm.move(b.id, { parentId: origin.parentId, ...(origin.index !== undefined ? { index: origin.index } : {}) }).catch(() => null);
+        if (!back) await this.bm.removeTree(b.id);
+      } else if (b) await this.bm.removeTree(b.id);
+      delete this.state.movedOrigins[n.id];
       if (e) delete this.state.map[e.b];
       if (b) delete this.state.map[b.id];
       this.dropShadowTree(n.id);
@@ -547,7 +587,19 @@ export class SyncEngine {
         changed = true;
       }
     } else {
+      // 채택(adopt): 같은 부모에 같은 폴더(제목)·북마크(정규화 URL)가 이미 있고 아직 매핑이 없으면 새로 만들지 않고 그것을 쓴다.
+      // Chrome 계정 동기화가 Everyfold 폴더를 다른 프로필에 복제했거나, 확장을 다시 설치한 경우 중복이 생기지 않는다.
+      const adopted = await this.findAdoptable(parentB, n);
+      if (adopted) {
+        bid = adopted.id;
+        this.state.pendingMappings.push({ browserId: bid, serverId: n.id });
+        if ((adopted.title ?? '') !== n.title) await this.bm.update(bid, { title: n.title });
+        this.state.map[bid] = n.id;
+        this.state.shadow[n.id] = { b: bid, kind: n.kind, parent: n.parentId, title: n.title, url: n.url, rev: n.rev };
+        return 'changed';
+      }
       const created = await this.bm.create({ parentId: parentB, title: n.title, ...(n.kind === 'bookmark' && n.url ? { url: n.url } : {}) });
+      this.childCache.get(parentB)?.push(created);
       bid = created.id;
       this.state.pendingMappings.push({ browserId: bid, serverId: n.id });
       changed = true;
@@ -556,6 +608,32 @@ export class SyncEngine {
     this.state.map[bid] = n.id;
     this.state.shadow[n.id] = { b: bid, kind: n.kind, parent: n.parentId, title: n.title, url: n.url, rev: n.rev };
     return changed ? 'changed' : 'same';
+  }
+
+  private async findAdoptable(parentB: string, n: ServerNode): Promise<BNode | null> {
+    let kids = this.childCache.get(parentB);
+    if (!kids) {
+      const [p] = await this.bm.getSubTree(parentB).catch(() => [] as BNode[]);
+      kids = (p?.children ?? []).map((c) => ({ id: c.id, title: c.title, ...(c.url ? { url: c.url } : {}) }));
+      this.childCache.set(parentB, kids);
+    }
+    const norm = n.kind === 'bookmark' && n.url ? safeNorm(n.url) : null;
+    const hit = kids.find((c) =>
+      !(c.id in this.state.map) && (n.kind === 'folder' ? !c.url && c.title === n.title : !!c.url && norm !== null && safeNorm(c.url) === norm));
+    if (hit) kids.splice(kids.indexOf(hit), 1);
+    return hit ?? null;
+  }
+
+  /** 설정: 새 북마크를 옮길지(복사 대신) */
+  async setMoveCaptures(on: boolean) {
+    this.state.moveCaptures = on;
+    if (on) this.state.moveHintDismissed = true;
+    await this.save();
+  }
+
+  async dismissMoveHint() {
+    this.state.moveHintDismissed = true;
+    await this.save();
   }
 
   /** 대량 삭제 보류를 "되돌리기" 로 처리: 지운 것을 서버 상태대로 브라우저에 다시 만든다 */
@@ -571,5 +649,13 @@ export class SyncEngine {
   private markForRestoreTree(sid: string) {
     for (const [id, e] of Object.entries(this.state.shadow)) if (e.parent === sid) this.markForRestoreTree(id);
     this.markForRestore(sid);
+  }
+}
+
+function safeNorm(url: string): string | null {
+  try {
+    return normalizeUrl(url);
+  } catch {
+    return null;
   }
 }

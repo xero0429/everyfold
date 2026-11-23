@@ -10,6 +10,8 @@ interface Status {
   pendingMassDelete: { deletes: number; live: number } | null;
   failed: Array<{ title: string; url: string | null; error: string; attempts: number; gaveUp: boolean }>;
   failedCount: number;
+  moveCaptures: boolean;
+  showMoveHint: boolean;
 }
 
 function show(s: Status) {
@@ -30,6 +32,8 @@ function show(s: Status) {
     li.textContent = `${f.title || f.url || '(untitled)'} — ${f.error}${f.gaveUp ? ' (stopped retrying)' : ''}`;
     return li;
   }));
+  $<HTMLInputElement>('moveCaptures').checked = s.moveCaptures;
+  $('moveHint').hidden = !s.showMoveHint;
   $('mass').hidden = !s.pendingMassDelete;
   if (s.pendingMassDelete) $('massText').textContent = `Sync paused: ${s.pendingMassDelete.deletes} of ${s.pendingMassDelete.live} bookmarks would be deleted.`;
 }
@@ -47,7 +51,7 @@ async function act(m: Msg) {
   return r;
 }
 
-async function loadSuggestions() {
+async function loadSuggestions(emptyText = '') {
   const r = await send<{ suggestions?: Array<{ id: string; title: string }>; error?: string }>({ type: 'suggestions' });
   const ul = $('suggestions');
   ul.replaceChildren();
@@ -65,6 +69,7 @@ async function loadSuggestions() {
     ul.append(li);
   }
   $('sugBox').hidden = !(r.suggestions ?? []).length;
+  $('sugResult').textContent = r.error ? r.error : (r.suggestions ?? []).length ? '' : emptyText;
 }
 
 $('connectForm').addEventListener('submit', async (ev) => {
@@ -87,6 +92,15 @@ $<HTMLInputElement>('importFile').addEventListener('change', async (ev) => {
     : `Imported ${r.received}: ${r.created} added, ${(r.mergedExisting ?? 0) + (r.mergedInFile ?? 0)} duplicates merged${r.skippedUnsafe ? `, ${r.skippedUnsafe} skipped (unsupported link type)` : ''}`;
   await loadSuggestions();
 });
+$('suggestNow').onclick = async () => {
+  $('sugResult').textContent = 'Looking for cleanups…';
+  const r = await send<{ error?: string }>({ type: 'generateSuggestions' });
+  if (r?.error) $('sugResult').textContent = r.error;
+  else await loadSuggestions('Nothing to clean up right now.');
+};
+$<HTMLInputElement>('moveCaptures').addEventListener('change', (ev) => void send<Status>({ type: 'setMoveCaptures', on: (ev.target as HTMLInputElement).checked }).then(show));
+$('moveHintOn').onclick = () => void send<Status>({ type: 'setMoveCaptures', on: true }).then(show);
+$('moveHintLater').onclick = () => void send<Status>({ type: 'dismissMoveHint' }).then(show);
 $('syncNow').onclick = () => void act({ type: 'sync' });
 $('massConfirm').onclick = () => void act({ type: 'confirmMassDelete' });
 $('massRestore').onclick = () => void act({ type: 'restoreMassDelete' });

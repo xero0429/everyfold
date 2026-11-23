@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setup } from '@everyfold/server/testing';
 import { app } from '@everyfold/server';
 import { BRAND } from '@everyfold/core';
-import { MAX_APPLY_ATTEMPTS, SyncEngine } from '../src/engine.js';
+import { MAX_APPLY_ATTEMPTS, SyncEngine, type BNode } from '../src/engine.js';
 import { FakeBookmarks, MemKV } from './fake-bookmarks.js';
 
 /**
@@ -184,5 +184,87 @@ describe('extension engine against real server (local D1)', () => {
     await C.e.sync();
     expect(C.bm.findUrl('https://refused.example/x')).toHaveLength(1);
     expect(C.e.state.failed).toEqual({});
+  });
+
+  it('a server merge (duplicate URL) leaves one bookmark with the server title, in the folder the user chose (S11)', async () => {
+    const reading = A.bm.findFolder('Reading', root(A))!;
+    expect(A.bm.dump(root(A))).toContain('/업무·도구/Notion|https://www.notion.so/team');
+    await A.bm.create({ parentId: reading, title: 'my own notion title', url: 'https://www.notion.so/team?utm_source=x' });
+    await A.e.sync();
+    await B.e.sync();
+    await A.e.sync();
+    const inRoot = (x: typeof A) => x.bm.dump(root(x)).filter((l) => l.includes('|https://www.notion.so/team'));
+    expect(inRoot(A)).toEqual(['/Reading/Notion|https://www.notion.so/team']);
+    expect(inRoot(B)).toEqual(['/Reading/Notion|https://www.notion.so/team']);
+    expect(A.bm.dump(root(A))).toEqual(B.bm.dump(root(B)));
+    // 서버 사본과 같은 폴더에 중복을 만들면 서버는 아무것도 쓰지 않는다(pull 에 안 온다) — 그래도 제목이 서버 것으로 맞춰진다
+    await A.bm.create({ parentId: reading, title: 'same folder dup', url: 'https://www.notion.so/team#x' });
+    await A.e.sync();
+    expect(inRoot(A)).toEqual(['/Reading/Notion|https://www.notion.so/team']);
+    expect(await A.e.sync()).toMatchObject({ pushed: 0, applied: 0 });
+  });
+
+  it('first pull adopts an existing copy of the Everyfold tree instead of duplicating it (S2: Chrome account sync)', async () => {
+    const D = { bm: new FakeBookmarks('chrome'), e: undefined as unknown as SyncEngine };
+    D.e = new SyncEngine(D.bm, new MemKV(), fetchVia);
+    // Chrome 계정 동기화가 A 의 Everyfold 폴더를 그대로 복제해 온 상황
+    const [src] = await A.bm.getSubTree(root(A));
+    const copy = async (n: BNode, parentId: string) => {
+      const c = await D.bm.create({ parentId, title: n.title, ...(n.url ? { url: n.url } : {}) });
+      for (const k of n.children ?? []) await copy(k, c.id);
+    };
+    await copy(src!, '2');
+    const before = D.bm.dump(D.bm.findFolder(BRAND.rootFolderTitle, '2')!);
+    await D.e.connect('http://local', { adminToken: 'admin-secret', deviceName: 'D' });
+    await D.e.sync();
+    expect(D.e.state.rootId).toBe(D.bm.findFolder(BRAND.rootFolderTitle, '2'));
+    expect(D.bm.dump(root(D))).toEqual(before);
+    for (const line of D.bm.dump(root(D)).filter((l) => l.includes('|'))) expect(D.bm.findUrl(line.split('|')[1]!)).toHaveLength(1);
+    // 이후 편집도 그 폴더로 오간다
+    await A.e.sync();
+    const ytD = D.bm.findUrl('https://www.youtube.com/watch?v=1')[0]!;
+    await D.bm.update(ytD, { title: 'from D' });
+    await D.e.sync();
+    await A.e.sync();
+    expect(A.bm.dump(root(A))).toEqual(D.bm.dump(root(D)));
+    expect(A.bm.dump(root(A)).some((l) => l.endsWith('/from D|https://www.youtube.com/watch?v=1'))).toBe(true);
+  });
+
+  it('Move setting on: a new bookmark is moved into its category (one copy), and undo puts it back where it was (S3 C)', async () => {
+    expect(A.e.state.moveCaptures).toBe(false);
+    await A.e.setMoveCaptures(true);
+    expect(A.e.state.moveHintDismissed).toBe(true);
+    const url = 'https://www.musinsa.com/app/goods/1';
+    const n = await A.bm.create({ parentId: '1', title: 'Musinsa', url });
+    const origIndex = n.index;
+    await A.e.noteCreated(n);
+    await A.e.sync();
+    expect(A.bm.findUrl(url)).toHaveLength(1);
+    const moved = A.bm.findUrl(url)[0]!;
+    expect(moved).toBe(n.id); // 같은 북마크를 옮겼다(새로 만들지 않음)
+    expect(await A.e['isInsideRoot'](moved)).toBe(true);
+    await B.e.sync();
+    expect(B.bm.dump(root(B)).filter((l) => l.endsWith(`|${url}`))).toHaveLength(1);
+    expect(A.bm.dump(root(A))).toEqual(B.bm.dump(root(B)));
+    expect(await A.e.sync()).toMatchObject({ pushed: 0, applied: 0 }); // 옮긴 뒤 조용하다
+
+    // 서버에서 그 batch 를 되돌리면 원래 자리(북마크바, 같은 순서)로 돌아온다 — 지워지지 않는다
+    const { batches } = await A.e.api<{ batches: Array<{ batch_id: string; ops: string }> }>('GET', '/changes?limit=5');
+    const batch = batches.find((b) => b.ops.includes('create'))!;
+    await A.e.api('POST', '/changes/undo', { batchId: batch.batch_id });
+    await A.e.sync();
+    await B.e.sync();
+    expect(A.bm.findUrl(url)).toEqual([n.id]);
+    const [back] = await A.bm.get(n.id);
+    expect(back).toMatchObject({ parentId: '1', index: origIndex });
+    expect(B.bm.findUrl(url)).toEqual([]);
+    expect(A.bm.dump(root(A))).toEqual(B.bm.dump(root(B)));
+
+    // 끄면 다시 복사(기존 동작)
+    await A.e.setMoveCaptures(false);
+    const m = await A.bm.create({ parentId: '1', title: 'Copy again', url: 'https://www.coupang.com/np/y' });
+    await A.e.noteCreated(m);
+    await A.e.sync();
+    expect(A.bm.findUrl('https://www.coupang.com/np/y')).toHaveLength(2);
   });
 });

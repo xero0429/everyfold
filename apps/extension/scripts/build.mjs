@@ -20,7 +20,7 @@ const targets = {
   firefox: {
     ...base,
     background: { scripts: ['background.js'] },
-    browser_specific_settings: { gecko: { id: 'everyfold@everyfold.dev', strict_min_version: '115.0' } },
+    browser_specific_settings: { gecko: { id: 'everyfold@xero0429.github.io', strict_min_version: '115.0' } },
   },
 };
 

@@ -10,6 +10,8 @@
   input, select { width: 100%; box-sizing: border-box; padding: 4px; }
   button { margin-top: 8px; }
   #error { color: #b91c1c; min-height: 1em; }
+  #moveHint { background: #e0f2fe; padding: 8px; border-radius: 6px; margin-top: 8px; }
+  label.check { display: flex; gap: 6px; align-items: flex-start; color: #111; } label.check input { width: auto; margin: 2px 0 0; }
   #mass { background: #fef3c7; padding: 8px; border-radius: 6px; margin-top: 8px; }
   ul { padding-left: 16px; } li button { margin: 2px 4px 0 0; }
   .muted { color: #666; }
@@ -32,6 +34,11 @@
   <div>Last sync: <span id="last"></span></div>
   <div class="muted" id="import"></div>
   <button id="syncNow">Sync now</button>
+  <div id="moveHint" hidden>
+    <div>You can move new bookmarks into Everyfold to avoid duplicates — turn it on in Settings.</div>
+    <button id="moveHintOn">Turn on</button>
+    <button id="moveHintLater">Not now</button>
+  </div>
   <div id="failedBox" hidden><div id="failedText"></div><ul id="failedList" class="muted"></ul></div>
   <div id="mass" hidden>
     <div id="massText"></div>
@@ -41,7 +48,12 @@
   <label for="importFile">Import from another tool (Netscape HTML, Floccus XBEL, Karakeep / Linkwarden JSON, Raindrop CSV)</label>
   <input id="importFile" type="file" accept=".html,.htm,.xbel,.xml,.json,.csv" />
   <div class="muted" id="importResult"></div>
+  <button id="suggestNow">Suggest cleanup</button>
+  <div class="muted" id="sugResult"></div>
   <div id="sugBox" hidden><h1>Suggestions</h1><ul id="suggestions"></ul></div>
+  <h1>Settings (this browser)</h1>
+  <label class="check" for="moveCaptures"><input id="moveCaptures" type="checkbox" />
+    <span>Move new bookmarks into Everyfold (instead of copying). Bookmarks you add outside the Everyfold folder are moved into their category; undoing that change on the server puts them back.</span></label>
   <button id="disconnect">Disconnect</button>
 </div>
 <div id="error"></div>

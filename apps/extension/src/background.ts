@@ -93,6 +93,9 @@ export type Msg =
   | { type: 'confirmMassDelete' }
   | { type: 'restoreMassDelete' }
   | { type: 'suggestions' }
+  | { type: 'generateSuggestions' }
+  | { type: 'setMoveCaptures'; on: boolean }
+  | { type: 'dismissMoveHint' }
   | { type: 'importFile'; text: string }
   | { type: 'decide'; id: string; approve: boolean };
 
@@ -102,6 +105,9 @@ function status() {
     connected: engine.connected, serverUrl: s.serverUrl, deviceName: s.deviceName, lastSyncAt: s.lastSyncAt, lastError: s.lastError,
     failed: Object.values(s.failed).slice(0, 20).map((f) => ({ title: f.node.title, url: f.node.url, error: f.error, attempts: f.attempts, gaveUp: f.attempts >= MAX_APPLY_ATTEMPTS })),
     failedCount: Object.keys(s.failed).length,
+    moveCaptures: s.moveCaptures,
+    // 첫 연결(첫 업로드) 뒤 한 번만: "옮기기를 켤 수 있어요" — 자동으로 옮기지는 않는다
+    showMoveHint: engine.connected && s.initialUploadDone && !s.moveCaptures && !s.moveHintDismissed,
     lastImport: s.lastImport, pendingMassDelete: s.pendingMassDelete ? { deletes: s.pendingMassDelete.deletes, live: s.pendingMassDelete.live } : null,
   };
 }
@@ -135,6 +141,14 @@ async function handle(m: Msg): Promise<unknown> {
       }
       case 'suggestions':
         return await engine.api('GET', '/suggestions');
+      case 'generateSuggestions':
+        return await engine.api('POST', '/suggestions/generate');
+      case 'setMoveCaptures':
+        await engine.setMoveCaptures(m.on);
+        return status();
+      case 'dismissMoveHint':
+        await engine.dismissMoveHint();
+        return status();
       case 'decide': {
         const r = await engine.api('POST', `/suggestions/${encodeURIComponent(m.id)}/${m.approve ? 'approve' : 'reject'}`);
         await runSync();

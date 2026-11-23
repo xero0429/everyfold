@@ -98,6 +98,29 @@ try {
   if (!/^Imported 3/.test(msg ?? '')) throw new Error('popup import: ' + msg);
   await waitFor(async () => (await sw.evaluate(() => chrome.bookmarks.search({ url: 'https://example.net/' }))).length > 0, 'imported bookmark in browser');
   step(`OK ${msg}`);
+
+  step('one-time Move hint → "Turn on" → a new bookmark is moved (one copy in the browser)');
+  await popup.reload();
+  await popup.waitForSelector('#moveHint:not([hidden])', { timeout: 10000 });
+  await popup.click('#moveHintOn');
+  await popup.waitForSelector('#moveHint[hidden]', { state: 'attached', timeout: 10000 });
+  if (!(await popup.isChecked('#moveCaptures'))) throw new Error('move setting not on after Turn on');
+  await sw.evaluate(() => chrome.bookmarks.create({ parentId: '1', title: 'Moved', url: 'https://moved.example/1' }));
+  await waitFor(async () => (await serverUrls()).includes('https://moved.example/1'), 'moved bookmark on server');
+  await popup.click('#syncNow');
+  await waitFor(async () => {
+    const hits = await sw.evaluate(() => chrome.bookmarks.search({ url: 'https://moved.example/1' }));
+    return hits.length === 1 && hits[0].parentId !== '1';
+  }, 'bookmark moved out of the bookmarks bar (single copy)');
+  step('OK moved into Everyfold');
+
+  step('Suggest cleanup button');
+  await popup.click('#suggestNow');
+  await popup.waitForFunction(() => {
+    const t = document.getElementById('sugResult')?.textContent ?? '';
+    return !document.getElementById('sugBox')?.hidden || (t && t !== 'Looking for cleanups…');
+  }, null, { timeout: 20000 });
+  step(`OK suggestions: ${await popup.$$eval('#suggestions li', (l) => l.length)} · ${await popup.textContent('#sugResult')}`);
   console.log('[e2e] PASS');
 } catch (e) {
   console.error('[e2e] FAIL', e);
