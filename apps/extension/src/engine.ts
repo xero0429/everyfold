@@ -105,6 +105,11 @@ export const emptyState = (): EngineState => ({
   moveCaptures: false, moveHintDismissed: false, movedOrigins: {}, server: null,
 });
 
+/** 서버 호출 타임아웃(engine.api) — 오류 문구는 `request_timeout after 15s: GET /pull` 꼴 */
+export const API_TIMEOUT_MS = 15_000;
+export const IMPORT_TIMEOUT_MS = 60_000;
+export const REQUEST_TIMEOUT = 'request_timeout';
+
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
 export class HttpError extends Error {
@@ -132,6 +137,10 @@ export class SyncEngine {
   /** pull 한 번 동안의 브라우저 폴더 자식 캐시(채택 검색용) */
   private childCache = new Map<string, BNode[]>();
   private running: Promise<unknown> = Promise.resolve();
+  /** 서버 호출 하나가 이만큼 응답이 없으면 끊는다(응답 없는 서버에 sync 줄이 영영 막히지 않게). 시험에서 줄인다 */
+  apiTimeoutMs = API_TIMEOUT_MS;
+  /** 북마크 파일 올리기(/import, 최대 10MB)만 넉넉히 */
+  importTimeoutMs = IMPORT_TIMEOUT_MS;
   /** 서버 호환 기준(시험에서 바꿔 끼운다) */
   compatPolicy: CompatPolicy = DEFAULT_COMPAT_POLICY;
 
@@ -154,8 +163,18 @@ export class SyncEngine {
     const headers: Record<string, string> = {};
     if (token) headers.authorization = `Bearer ${token}`;
     if (body !== undefined) headers['content-type'] = 'application/json';
-    const res = await this.fetchImpl(base + path, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
-    const text = await res.text();
+    const ms = path === '/import' ? this.importTimeoutMs : this.apiTimeoutMs;
+    // 같은 signal 이 본문 읽기(res.text)까지 끊는다
+    const signal = AbortSignal.timeout(ms);
+    let res: Response;
+    let text: string;
+    try {
+      res = await this.fetchImpl(base + path, { method, headers, signal, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+      text = await res.text();
+    } catch (e) {
+      if (signal.aborted) throw new Error(`${REQUEST_TIMEOUT} after ${Math.round(ms / 1000)}s: ${method} ${path}`);
+      throw e;
+    }
     let json: any = null;
     try {
       json = text ? JSON.parse(text) : null;
