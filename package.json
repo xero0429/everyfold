@@ -1,6 +1,15 @@
 {
   "name": "everyfold",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xero0429/everyfold.git"
+  },
+  "homepage": "https://github.com/xero0429/everyfold#readme",
+  "bugs": {
+    "url": "https://github.com/xero0429/everyfold/issues"
+  },
   "type": "module",
   "packageManager": "pnpm@9.15.9",
   "scripts": {
