@@ -12,6 +12,8 @@ export function friendlyError(raw: string): string {
   if (/^HTTP 404/.test(raw)) return 'That server doesn’t look like Everyfold. Check the URL.';
   if (/^HTTP 5\d\d/.test(raw)) return 'The server ran into a problem. Try again in a moment.';
   if (/Failed to fetch|NetworkError|Load failed|net::ERR_/i.test(raw)) return 'Can’t reach the server. Check the URL and your connection.';
+  if (/^import_pending$/.test(raw)) return 'Your first upload is still being sorted on the server. Everyfold will check again in a few minutes.';
+  if (/^request_timeout/.test(raw)) return 'The server didn’t answer in time. Try again in a moment.';
   if (/invalid url|server url/i.test(raw)) return 'Enter a full server URL, like https://everyfold.you.workers.dev';
   if (/not.connected/.test(raw)) return 'This browser isn’t connected.';
   if (/^server_outdated$/.test(raw)) return 'Your server needs an update before this browser can sync.';

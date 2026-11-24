@@ -1,7 +1,7 @@
 import browser from 'webextension-polyfill';
 import type { Msg } from './background.js';
 import { compatNotice, friendlyError, hostOf, plural, relTime } from './popup-text.js';
-import type { Compat } from '@everyfold/core';
+import { POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY, readCachedStatus, readCachedSuggestions, type PopupStatus, type PopupSuggestion } from './popup-cache.js';
 
 /**
  * 팝업 — 화면 3개: 연결 전(connect) / 연결 후(main: 상태 카드 → 가져오기 → 정리 제안) / 설정(settings).
@@ -10,22 +10,17 @@ import type { Compat } from '@everyfold/core';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const send = <T = any>(m: Msg) => browser.runtime.sendMessage(m) as Promise<T>;
 
-interface Status {
-  connected: boolean; serverUrl: string | null; deviceName: string | null; lastSyncAt: number | null; lastError: string | null;
-  lastImport: { created: number; mergedExisting: number; mergedInFile: number } | null;
-  pendingMassDelete: { deletes: number; live: number } | null;
-  failed: Array<{ title: string; url: string | null; error: string; attempts: number; gaveUp: boolean }>;
-  failedCount: number;
-  moveCaptures: boolean;
-  showMoveHint: boolean;
-  compat?: Compat;
-  serverVersion?: string | null;
-}
-interface Suggestion { id: string; title: string; kind?: string; actions?: unknown[] }
+type Status = PopupStatus;
+type Suggestion = PopupSuggestion;
 
 let last: Status | null = null;
 let view: 'main' | 'settings' = 'main';
 let syncing = false;
+/** background 의 진짜 응답을 한 번이라도 그렸는지 / 제안을 서버에서 받아 그렸는지 — 그 뒤엔 캐시로 덮지 않는다 */
+let fresh = false;
+/** refresh() 가 background 응답을 못 받았을 때의 오류(늦게 끝난 캐시 그림이 지우지 않게) */
+let refreshError: string | null = null;
+let sugFresh = false;
 
 const KIND_LABEL: Record<string, string> = { new_category: 'New category', apply_rules: 'Sort uncategorized', remove_empty: 'Remove empty' };
 
@@ -158,9 +153,33 @@ function show(s: Status) {
 }
 
 async function refresh() {
-  const st = await send<Status>({ type: 'status' });
+  let st: Status;
+  try {
+    st = await send<Status>({ type: 'status' });
+  } catch (e) {
+    // background 가 답하지 못하면: 캐시로 그린 게 없을 때만 연결 폼을 띄운다(예전처럼 빈 팝업으로 두지 않기)
+    if (!last) $('connect').hidden = false;
+    refreshError = String((e as Error)?.message ?? e);
+    setError(refreshError);
+    return;
+  }
+  fresh = true;
+  refreshError = null;
   show(st);
   if (st.connected) await loadSuggestions();
+}
+
+/** 첫 그림: 작은 캐시 키부터 읽어 바로 그린다(SW 깨우기·큰 상태 읽기를 기다리지 않음). 진짜 응답이 먼저 오면 아무것도 안 한다. */
+async function paintFromCache() {
+  const r = await browser.storage.local.get([POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY]).catch(() => ({} as Record<string, unknown>));
+  if (fresh) return;
+  const st = readCachedStatus(r[POPUP_STATUS_KEY]);
+  if (!st) return; // 첫 설치·옛 판 키 → background 응답을 기다린다
+  show(st);
+  // background 가 이미 실패를 알렸으면 캐시의 lastError 로 그 오류를 덮지 않는다
+  if (refreshError) setError(refreshError);
+  const sugs = readCachedSuggestions(r[POPUP_SUGGESTIONS_KEY], st);
+  if (sugs && !sugFresh) renderSuggestions({ suggestions: sugs }, '', true);
 }
 
 async function act(m: Msg) {
@@ -190,6 +209,12 @@ function setResult(id: string, text: string, tone: 'ok' | 'danger' | '' = '') {
 
 async function loadSuggestions(emptyText = '') {
   const r = await send<{ suggestions?: Suggestion[]; error?: string }>({ type: 'suggestions' });
+  sugFresh = true;
+  renderSuggestions(r, emptyText, false);
+}
+
+/** stale = 지난번 캐시 — 서버 응답이 올 때까지 Apply/Dismiss 를 막아 둔다(이미 처리된 제안을 누르지 않게) */
+function renderSuggestions(r: { suggestions?: Suggestion[]; error?: string }, emptyText: string, stale: boolean) {
   const list = r.suggestions ?? [];
   $('suggestions').replaceChildren(...list.map((s) => {
     const li = document.createElement('li');
@@ -218,6 +243,7 @@ async function loadSuggestions(emptyText = '') {
     no.className = 'btn ghost sm';
     no.textContent = 'Dismiss';
     no.setAttribute('aria-label', `Dismiss: ${s.title}`);
+    if (stale) ok.disabled = no.disabled = true;
     const decide = async (approve: boolean) => {
       ok.disabled = no.disabled = true;
       (approve ? ok : no).setAttribute('aria-busy', 'true');
@@ -348,4 +374,5 @@ $('disconnectYes').onclick = async () => {
 
 // 팝업을 열어 둔 동안 "4 minutes ago" 가 낡지 않게
 setInterval(() => last && renderLast(last), 30_000);
+void paintFromCache();
 void refresh();

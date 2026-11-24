@@ -71,7 +71,8 @@
   </div>
 
   <!-- 연결 전 -->
-  <section id="connect" class="view" aria-labelledby="connectTitle">
+  <!-- 연결 폼도 처음엔 숨긴다 — show() 가 둘 중 하나만 켠다(연결된 사용자가 폼 크기로 열렸다 바뀌는 깜빡임 방지) -->
+  <section id="connect" class="view" aria-labelledby="connectTitle" hidden>
     <h1 id="connectTitle" class="title">Connect this browser</h1>
     <p class="lede">Keep one bookmark library in sync across every browser, on a server you run.</p>
     <form id="connectForm" class="stack">

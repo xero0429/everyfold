@@ -1,5 +1,6 @@
 import browser from 'webextension-polyfill';
 import { SyncEngine, HttpError, MAX_APPLY_ATTEMPTS, type BNode, type BookmarksApi, type EngineState, type KV, type SyncReport } from './engine.js';
+import { POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY, toCachedStatus, toCachedSuggestions, type PopupStatus, type PopupSuggestion } from './popup-cache.js';
 
 /**
  * 백그라운드 — 브라우저 이벤트를 엔진에 잇는다.
@@ -16,7 +17,8 @@ const kv: KV = {
     return r[STATE_KEY] as Partial<EngineState> | undefined;
   },
   async set(s) {
-    await browser.storage.local.set({ [STATE_KEY]: s });
+    // 팝업 첫 그림용 작은 키를 같은 쓰기에 함께 넣는다(팝업은 큰 상태·SW 를 기다리지 않고 이것부터 그린다)
+    await browser.storage.local.set({ [STATE_KEY]: s, [POPUP_STATUS_KEY]: toCachedStatus(status()) });
   },
 };
 
@@ -99,7 +101,7 @@ export type Msg =
   | { type: 'importFile'; text: string }
   | { type: 'decide'; id: string; approve: boolean };
 
-function status() {
+function status(): PopupStatus {
   const s = engine.state;
   return {
     connected: engine.connected, serverUrl: s.serverUrl, deviceName: s.deviceName, lastSyncAt: s.lastSyncAt, lastError: s.lastError,
@@ -125,6 +127,7 @@ async function handle(m: Msg): Promise<unknown> {
         return { ...(await runSync()), status: status() };
       case 'disconnect':
         await engine.disconnect();
+        await browser.storage.local.remove(POPUP_SUGGESTIONS_KEY).catch(() => undefined);
         await badge();
         return status();
       case 'sync':
@@ -141,8 +144,14 @@ async function handle(m: Msg): Promise<unknown> {
         await runSync();
         return r;
       }
-      case 'suggestions':
-        return await engine.api('GET', '/suggestions');
+      case 'suggestions': {
+        const r = await engine.api<{ suggestions?: PopupSuggestion[] }>('GET', '/suggestions');
+        // 다음에 팝업을 열 때 먼저 보여 줄 마지막 결과(작게)
+        if (Array.isArray(r?.suggestions)) {
+          await browser.storage.local.set({ [POPUP_SUGGESTIONS_KEY]: toCachedSuggestions(engine.state.serverUrl, r.suggestions) }).catch(() => undefined);
+        }
+        return r;
+      }
       case 'generateSuggestions':
         return await engine.api('POST', '/suggestions/generate');
       case 'setMoveCaptures':
@@ -163,4 +172,8 @@ async function handle(m: Msg): Promise<unknown> {
 }
 
 browser.runtime.onMessage.addListener((m: unknown) => handle(m as Msg));
-void ready.then(() => badge());
+// 업데이트 직후처럼 작은 키가 아직 없거나 옛 판이면 SW 가 깰 때 한 번 채운다
+void ready.then(async () => {
+  await browser.storage.local.set({ [POPUP_STATUS_KEY]: toCachedStatus(status()) }).catch(() => undefined);
+  await badge();
+});
