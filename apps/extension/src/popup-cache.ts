@@ -5,9 +5,14 @@
  */
 export const POPUP_STATUS_KEY = 'everyfold.popupStatus';
 export const POPUP_SUGGESTIONS_KEY = 'everyfold.popupSuggestions';
-/** 모양이 바뀌면 올린다 — 다른 판의 키는 읽지 않는다(첫 설치처럼 취급) */
+/**
+ * 모양이 바뀌면 올린다 — 다른 판의 키는 읽지 않는다(첫 설치처럼 취급).
+ * 규칙: PopupStatus 필드를 더하거나 빼거나 타입을 바꾸면 이 값을 올리고 POPUP_STATUS_FIELDS 도 고친다.
+ * test/popup-fix.test.ts 가 판마다 필드 목록을 못 박아 둔다(같은 판에서 목록이 바뀌면 실패).
+ */
 export const POPUP_CACHE_VERSION = 1;
-/** 캐시에 넣는 실패 목록·제안 수 상한(키를 수백 바이트~수 KB 로 묶어 둔다) */
+/** 캐시에 넣는 실패 목록·제안 수 상한(키를 수백 바이트~수 KB 로 묶어 둔다).
+ *  failedCount 는 전체 수 그대로 → 캐시 그림은 "N items" 문구 아래 앞 5줄만, 진짜 응답이 오면 최대 20줄로 늘어난다(의도된 상한) */
 export const CACHE_FAILED_MAX = 5;
 export const CACHE_SUGGESTIONS_MAX = 10;
 
@@ -22,6 +27,14 @@ export interface PopupStatus {
   compat?: import('@everyfold/core').Compat;
   serverVersion?: string | null;
 }
+/** PopupStatus 의 필드 이름 전부 — 아래 타입 검사가 interface 와 어긋나면 typecheck 를 깨뜨린다 */
+export const POPUP_STATUS_FIELDS = [
+  'connected', 'serverUrl', 'deviceName', 'lastSyncAt', 'lastError', 'lastImport', 'pendingMassDelete',
+  'failed', 'failedCount', 'moveCaptures', 'showMoveHint', 'compat', 'serverVersion',
+] as const satisfies ReadonlyArray<keyof PopupStatus>;
+type MissingField = Exclude<keyof PopupStatus, (typeof POPUP_STATUS_FIELDS)[number]>;
+/** MissingField 가 never 가 아니면(= interface 에 필드를 더하고 목록을 안 고침) 여기서 typecheck 실패 */
+export const POPUP_STATUS_FIELDS_COMPLETE: [MissingField] extends [never] ? true : MissingField = true;
 export interface PopupSuggestion { id: string; title: string; kind?: string; actions?: unknown[] }
 
 interface CachedStatus { v: number; status: PopupStatus }

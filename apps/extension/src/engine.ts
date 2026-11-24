@@ -76,6 +76,8 @@ export interface EngineState {
   failed: Record<string, FailedApply>;
   /** 마지막으로 본 서버 판(GET /version)과 호환 판정. null = 아직 못 봤다 */
   server: ServerCheck | null;
+  /** 첫 업로드(/import)가 시간 초과로 끊긴 뒤 이 시각까지는 /import 를 다시 보내지 않는다(서버가 아직 분류 중일 수 있다 → 동시 import·중복 생성 막기) */
+  importRetryAt?: number | null;
 }
 
 export interface ServerCheck {
@@ -102,13 +104,18 @@ export const MAX_APPLY_ATTEMPTS = 5;
 export const emptyState = (): EngineState => ({
   serverUrl: null, token: null, deviceName: null, rev: 0, rootId: null, shadow: {}, map: {}, initialUploadDone: false,
   lastSyncAt: null, lastError: null, lastImport: null, pendingMassDelete: null, pendingMappings: [], captures: [], failed: {},
-  moveCaptures: false, moveHintDismissed: false, movedOrigins: {}, server: null,
+  moveCaptures: false, moveHintDismissed: false, movedOrigins: {}, server: null, importRetryAt: null,
 });
 
 /** 서버 호출 타임아웃(engine.api) — 오류 문구는 `request_timeout after 15s: GET /pull` 꼴 */
 export const API_TIMEOUT_MS = 15_000;
-export const IMPORT_TIMEOUT_MS = 60_000;
+/** /import: 서버가 규칙 밖 북마크를 50개씩 순차 LLM 분류한다 → 수천 개면 수 분. 분류 상한을 넉넉히 넘게 */
+export const IMPORT_TIMEOUT_MS = 10 * 60_000;
+/** /sync/push: capture(autoCategorize)도 같은 순차 LLM 분류를 탄다 → 일반 호출보다 넉넉히 */
+export const PUSH_TIMEOUT_MS = 2 * 60_000;
 export const REQUEST_TIMEOUT = 'request_timeout';
+/** 첫 업로드가 시간 초과된 뒤 importRetryAt 전에 sync 하면 이 오류로 멈춘다(/import 를 다시 보내지 않음) */
+export const IMPORT_PENDING = 'import_pending';
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -139,8 +146,10 @@ export class SyncEngine {
   private running: Promise<unknown> = Promise.resolve();
   /** 서버 호출 하나가 이만큼 응답이 없으면 끊는다(응답 없는 서버에 sync 줄이 영영 막히지 않게). 시험에서 줄인다 */
   apiTimeoutMs = API_TIMEOUT_MS;
-  /** 북마크 파일 올리기(/import, 최대 10MB)만 넉넉히 */
+  /** 북마크 올리기(/import — 최대 10MB, 서버 LLM 분류 포함) */
   importTimeoutMs = IMPORT_TIMEOUT_MS;
+  /** /sync/push(capture 자동 분류 포함) */
+  pushTimeoutMs = PUSH_TIMEOUT_MS;
   /** 서버 호환 기준(시험에서 바꿔 끼운다) */
   compatPolicy: CompatPolicy = DEFAULT_COMPAT_POLICY;
 
@@ -158,12 +167,19 @@ export class SyncEngine {
   }
 
   /* ───────── 서버 호출 ───────── */
+  /** 경로별 타임아웃 — LLM 분류를 타는 /import·/sync/push 만 길게 */
+  timeoutFor(path: string): number {
+    if (path === '/import') return this.importTimeoutMs;
+    if (path === '/sync/push') return this.pushTimeoutMs;
+    return this.apiTimeoutMs;
+  }
+
   async api<T>(method: string, path: string, body?: unknown, token = this.state.token): Promise<T> {
     const base = (this.state.serverUrl ?? '').replace(/\/+$/, '');
     const headers: Record<string, string> = {};
     if (token) headers.authorization = `Bearer ${token}`;
     if (body !== undefined) headers['content-type'] = 'application/json';
-    const ms = path === '/import' ? this.importTimeoutMs : this.apiTimeoutMs;
+    const ms = this.timeoutFor(path);
     // 같은 signal 이 본문 읽기(res.text)까지 끊는다
     const signal = AbortSignal.timeout(ms);
     let res: Response;
@@ -287,7 +303,17 @@ export class SyncEngine {
       for (const c of n.children ?? []) walk(c, n.title ? [...path, n.title] : path);
     };
     if (top) walk(top, []);
-    const r = await this.api<{ created: number; mergedExisting: number; mergedInFile: number }>('POST', '/import', { items });
+    const retryAt = this.state.importRetryAt ?? null;
+    if (retryAt !== null && this.now() < retryAt) throw new Error(IMPORT_PENDING);
+    let r: { created: number; mergedExisting: number; mergedInFile: number };
+    try {
+      r = await this.api('POST', '/import', { items });
+    } catch (e) {
+      // 시간 초과 = 서버는 아직 분류 중일 수 있다 → 한동안 다시 보내지 않는다(그 뒤 다시 보내면 서버가 norm_url 로 합친다)
+      if (e instanceof Error && e.message.startsWith(REQUEST_TIMEOUT)) this.state.importRetryAt = this.now() + this.importTimeoutMs;
+      throw e;
+    }
+    this.state.importRetryAt = null;
     this.state.initialUploadDone = true;
     this.state.lastImport = { created: r.created, mergedExisting: r.mergedExisting, mergedInFile: r.mergedInFile };
     await this.save();
@@ -383,13 +409,20 @@ export class SyncEngine {
       }
 
       if (ops.length || this.state.pendingMappings.length) {
-        const pushRes = await this.pushOps(ops, confirm, captureInfo);
-        if ('error' in pushRes) {
-          report.blocked = pushRes;
-          this.state.pendingMassDelete = { ops: ops.filter((o) => o.op === 'delete'), deletes: pushRes.deletes, live: pushRes.liveBookmarks, at: this.now() };
-          // 생성·수정만 다시 보낸다
-          const rest = ops.filter((o) => o.op !== 'delete');
-          if (rest.length) await this.pushOps(rest, false, captureInfo);
+        try {
+          const pushRes = await this.pushOps(ops, confirm, captureInfo);
+          if ('error' in pushRes) {
+            report.blocked = pushRes;
+            this.state.pendingMassDelete = { ops: ops.filter((o) => o.op === 'delete'), deletes: pushRes.deletes, live: pushRes.liveBookmarks, at: this.now() };
+            // 생성·수정만 다시 보낸다
+            const rest = ops.filter((o) => o.op !== 'delete');
+            if (rest.length) await this.pushOps(rest, false, captureInfo);
+          }
+        } catch (e) {
+          // push 가 끝나지 못하면(시간 초과·네트워크·서버 오류) 꺼낸 capture 를 되돌려 둔다 → 다음 sync 에 다시 보낸다
+          // (서버가 이미 만들었으면 다음 push 는 같은 URL 로 merged 가 된다)
+          this.state.captures.unshift(...captures);
+          throw e;
         }
         report.pushed = ops.length;
       }

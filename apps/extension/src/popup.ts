@@ -18,6 +18,8 @@ let view: 'main' | 'settings' = 'main';
 let syncing = false;
 /** background 의 진짜 응답을 한 번이라도 그렸는지 / 제안을 서버에서 받아 그렸는지 — 그 뒤엔 캐시로 덮지 않는다 */
 let fresh = false;
+/** refresh() 가 background 응답을 못 받았을 때의 오류(늦게 끝난 캐시 그림이 지우지 않게) */
+let refreshError: string | null = null;
 let sugFresh = false;
 
 const KIND_LABEL: Record<string, string> = { new_category: 'New category', apply_rules: 'Sort uncategorized', remove_empty: 'Remove empty' };
@@ -157,10 +159,12 @@ async function refresh() {
   } catch (e) {
     // background 가 답하지 못하면: 캐시로 그린 게 없을 때만 연결 폼을 띄운다(예전처럼 빈 팝업으로 두지 않기)
     if (!last) $('connect').hidden = false;
-    setError(String((e as Error)?.message ?? e));
+    refreshError = String((e as Error)?.message ?? e);
+    setError(refreshError);
     return;
   }
   fresh = true;
+  refreshError = null;
   show(st);
   if (st.connected) await loadSuggestions();
 }
@@ -172,6 +176,8 @@ async function paintFromCache() {
   const st = readCachedStatus(r[POPUP_STATUS_KEY]);
   if (!st) return; // 첫 설치·옛 판 키 → background 응답을 기다린다
   show(st);
+  // background 가 이미 실패를 알렸으면 캐시의 lastError 로 그 오류를 덮지 않는다
+  if (refreshError) setError(refreshError);
   const sugs = readCachedSuggestions(r[POPUP_SUGGESTIONS_KEY], st);
   if (sugs && !sugFresh) renderSuggestions({ suggestions: sugs }, '', true);
 }

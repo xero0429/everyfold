@@ -1,6 +1,6 @@
 import browser from 'webextension-polyfill';
 import { SyncEngine, HttpError, MAX_APPLY_ATTEMPTS, type BNode, type BookmarksApi, type EngineState, type KV, type SyncReport } from './engine.js';
-import { POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY, toCachedStatus, toCachedSuggestions, type PopupSuggestion } from './popup-cache.js';
+import { POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY, toCachedStatus, toCachedSuggestions, type PopupStatus, type PopupSuggestion } from './popup-cache.js';
 
 /**
  * 백그라운드 — 브라우저 이벤트를 엔진에 잇는다.
@@ -101,7 +101,7 @@ export type Msg =
   | { type: 'importFile'; text: string }
   | { type: 'decide'; id: string; approve: boolean };
 
-function status() {
+function status(): PopupStatus {
   const s = engine.state;
   return {
     connected: engine.connected, serverUrl: s.serverUrl, deviceName: s.deviceName, lastSyncAt: s.lastSyncAt, lastError: s.lastError,
