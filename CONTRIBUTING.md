@@ -37,6 +37,10 @@ The server and the extension update separately (servers update when their owner 
 
 `pnpm package:extension` builds `apps/extension/dist/store/` (Chrome zip, Firefox zip, source zip for AMO). Listing text, permission reasons and reviewer notes live in `docs/store/`; the release steps are in `docs/RELEASE-CHECKLIST.md`.
 
+## README media
+
+The demo GIF and popup screenshots in the README (`docs/assets/`) are generated headless from the real popup with a mock runtime and example bookmarks — no server, no real data. After a popup change, regenerate them with `pnpm --filter @everyfold/extension readme-media` (needs `ffmpeg` and `npx playwright-core install chromium`).
+
 ## Pull requests
 
 - Keep PRs focused; add or update tests for behaviour changes (`pnpm test` must pass — CI runs typecheck, tests and the extension build).

@@ -8,6 +8,7 @@ async function sendMessage(m) {
   const s = ef();
   s.log.push(m.type);
   if (s.hang?.includes(m.type)) return never();
+  if (s.delay?.[m.type]) await later(null, s.delay[m.type]); // README GIF 용: 진행 중 화면을 몇 프레임 보여 준다
   if (s.responses?.[m.type]) return later(s.responses[m.type], 150);
   switch (m.type) {
     case 'status':

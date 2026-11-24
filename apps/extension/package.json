@@ -24,7 +24,8 @@
     "package:chrome": "node scripts/package.mjs chrome",
     "package:firefox": "node scripts/package.mjs firefox",
     "package:source": "node scripts/package.mjs source",
-    "store-shots": "node scripts/store-shots.mjs"
+    "store-shots": "node scripts/store-shots.mjs",
+    "readme-media": "node scripts/readme-media.mjs"
   },
   "dependencies": {
     "@everyfold/core": "workspace:*",

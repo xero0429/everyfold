@@ -1,24 +1,69 @@
-Everyfold — one bookmark library for every browser, auto-organized.
+<p align="center">
+  <img src="apps/extension/static/icons/icon-128.png" width="88" height="88" alt="Everyfold logo">
+</p>
 
-[![CI](https://github.com/xero0429/everyfold/actions/workflows/ci.yml/badge.svg)](https://github.com/xero0429/everyfold/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h1 align="center">Everyfold</h1>
 
-[English](README.md) · [한국어](README.ko.md)
+<p align="center">
+  <b>Self-hosted bookmark sync for Chrome, Edge, Brave and Firefox — one library in every browser, auto-organized into folders, on your own free Cloudflare Worker.</b>
+</p>
 
-<!-- TODO: demo GIF (connect two browsers → bookmark in one → appears categorized in the other) -->
+<p align="center">
+  <a href="https://github.com/xero0429/everyfold/releases/latest"><img src="https://img.shields.io/github/v/release/xero0429/everyfold?label=release&color=3150d0" alt="Latest release"></a>
+  <a href="https://github.com/xero0429/everyfold/actions/workflows/ci.yml"><img src="https://github.com/xero0429/everyfold/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="#2-install-the-extension"><img src="https://img.shields.io/badge/Chrome%20%C2%B7%20Edge%20%C2%B7%20Brave-MV3-4285F4?logo=googlechrome&logoColor=white" alt="Chrome, Edge, Brave (Manifest V3)"></a>
+  <a href="#2-install-the-extension"><img src="https://img.shields.io/badge/Firefox-140%2B%20(preview)-FF7139?logo=firefoxbrowser&logoColor=white" alt="Firefox 140+ (preview)"></a>
+  <a href="#1-deploy-the-server"><img src="https://img.shields.io/badge/Cloudflare%20Workers-free%20plan-F38020?logo=cloudflare&logoColor=white" alt="Runs on the Cloudflare Workers free plan"></a>
+</p>
 
-Everyfold keeps **one bookmark library on your own free Cloudflare Worker** (one-click deploy from GitHub) and mirrors it into an `Everyfold` folder in every browser you connect (Chrome and Firefox today). New bookmarks are sorted into category folders automatically — by built-in domain rules, by what you've taught it, and optionally by an LLM.
+<p align="center">
+  <a href="README.md">English</a> · <a href="README.ko.md">한국어</a> · <a href="#quick-start">Quick start</a> · <a href="#faq">FAQ</a> · <a href="#compared-to-other-bookmark-managers">Compared to</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/everyfold-demo.gif" width="900" alt="Demo: connect the Everyfold extension to your server, your bookmarks are copied into an Everyfold folder in Chrome and Firefox, a new bookmark saved in Chrome is sorted into the Recipes category in both browsers, and cleanup suggestions wait for approval.">
+</p>
+
+Everyfold is an open-source **cross-browser bookmark sync** and **auto bookmark organizer**. It keeps **one bookmark library on your own free Cloudflare Worker** (one-click deploy from GitHub) and mirrors it into an `Everyfold` folder in every browser you connect — Chrome, Edge, Brave and Firefox today. New bookmarks are sorted into category folders automatically — by built-in domain rules, by what you've taught it, and optionally by an AI (LLM).
 
 There is no Everyfold account and no Everyfold-run server: **you deploy the server once** (about 5 minutes, Cloudflare's free plan is enough) **and update it when a new version comes out** (one click in GitHub Actions — see [Updating your server](#updating-your-server)). Your bookmarks only ever go to that server.
 
-- **Real browser bookmarks.** No new app to open: the `Everyfold` folder lives in each browser's own bookmarks (Chrome: *Other bookmarks*, Firefox: *Other Bookmarks*).
-- **Your existing folders are never touched.** On first connect your bookmarks are *copied* into the library (duplicates merged); the originals stay where they are.
-- **Auto-categorized.** Rules → learned from your moves → optional Claude Haiku. An LLM can only *suggest* a new category; nothing new appears until you approve it.
-- **Safe by default.** Deleting ≥ 20% of bookmarks in one sync pauses and asks first (in the popup). Every change is recorded in a history you can undo, and a daily snapshot can be restored — both through the server API for now (see [Undo and snapshots](#undo-and-snapshots)); there is no UI for them yet.
-- **Your own server, free tier friendly.** One Cloudflare Worker + D1 database in your Cloudflare account. No Docker, no VPS — but it is a server you own, so you also deploy its updates.
-- **Import from other tools.** Netscape HTML (every browser), Floccus (XBEL / HTML), Karakeep (JSON), Linkwarden (JSON), Raindrop.io (CSV / HTML).
+## Features
 
-## 5-minute setup
+- 🔖 **Real browser bookmarks.** No new app to open: the `Everyfold` folder lives in each browser's own bookmarks (Chrome: *Other bookmarks*, Firefox: *Other Bookmarks*).
+- 🔄 **Syncs across browsers.** Chrome, Edge, Brave and Firefox (preview) share one library; changes sync when you make them, every 5 minutes, and when a window regains focus.
+- 🗂️ **Auto-categorized.** Rules → learned from your moves → optional Claude Haiku. An LLM can only *suggest* a new category; nothing new appears until you approve it.
+- 🛡️ **Your existing folders are never touched, and big deletes wait for you.** On first connect your bookmarks are *copied* into the library (duplicates merged); the originals stay where they are. Deleting ≥ 20% of bookmarks in one sync pauses and asks first (in the popup). Every change is recorded in a history you can undo, and a daily snapshot can be restored — both through the server API for now (see [Undo and snapshots](#undo-and-snapshots)); there is no UI for them yet.
+- ☁️ **Self-hosted, free tier friendly.** One Cloudflare Worker + D1 database in your Cloudflare account. No Docker, no VPS — but it is a server you own, so you also deploy its updates.
+- 📥 **Import from other tools.** Netscape HTML (every browser), Floccus (XBEL / HTML), Karakeep (JSON), Linkwarden (JSON), Raindrop.io (CSV / HTML).
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="25%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/screens/connect-dark.png"><img src="docs/assets/screens/connect-light.png" alt="Connect form: server URL, admin token and device name"></picture></td>
+    <td width="25%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/screens/connected-dark.png"><img src="docs/assets/screens/connected-light.png" alt="Popup after syncing: status, device, server and two cleanup suggestions to apply or dismiss"></picture></td>
+    <td width="25%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/screens/mass-dark.png"><img src="docs/assets/screens/mass-light.png" alt="Sync paused before a large delete, asking to undo or confirm"></picture></td>
+    <td width="25%" valign="top"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/screens/settings-dark.png"><img src="docs/assets/screens/settings-light.png" alt="Settings: copy or move new bookmarks into Everyfold"></picture></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Connect</b> a browser</td>
+    <td align="center"><b>Synced</b>, with cleanup ideas</td>
+    <td align="center"><b>Big deletes</b> wait for you</td>
+    <td align="center"><b>Copy or move</b> new bookmarks</td>
+  </tr>
+</table>
+
+## Quick start
+
+1. **Deploy your server** — click [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xero0429/everyfold) and set an `ADMIN_TOKEN` (`openssl rand -hex 32`). You get `https://everyfold.<your-subdomain>.workers.dev`. → [details](#1-deploy-the-server)
+2. **Install the extension** — download the Chrome or Firefox zip from the [latest release](https://github.com/xero0429/everyfold/releases/latest) and load it in developer mode (Chrome Web Store / Firefox Add-ons listings are not published yet). → [details](#2-install-the-extension)
+3. **Connect each browser** — click the Everyfold icon, paste the server URL and admin token, name the device, *Connect*. → [details](#3-connect-each-browser)
+
+Then, once: [add the update workflow to your copy](#updating-your-server) so future server updates are one click.
+
+## 5-minute setup (in detail)
 
 ### 1. Deploy the server
 
@@ -172,7 +217,7 @@ Undo writes each node the batch touched back to its state just before the batch,
 
 A Worker request on the Free plan may make at most 50 D1 calls. A push is written in one D1 batch and a folder delete is a single statement, so a push does not grow its D1 call count with its size (a test pushes 300 mixed operations in 15 or fewer calls; it fails above 25). Free D1 also caps rows read/written per day; a library of tens of thousands of bookmarks fits, but the very first import of a huge library may take more than one day's write quota.
 
-## Run locally
+## Run locally (development)
 
 ```sh
 corepack enable && pnpm install
@@ -184,7 +229,7 @@ pnpm --filter @everyfold/extension e2e   # real Chromium + wrangler dev (needs: 
 pnpm package:extension                # store zips → apps/extension/dist/store/ (see docs/store/)
 ```
 
-## Compared to
+## Compared to other bookmark managers
 
 | | Everyfold | [Floccus](https://github.com/floccusaddon/floccus) | [Karakeep](https://github.com/karakeep-app/karakeep) | [Linkwarden](https://github.com/linkwarden/linkwarden) | [TidyMark](https://github.com/PanHywel/TidyMark) |
 |---|---|---|---|---|---|
@@ -195,6 +240,36 @@ pnpm package:extension                # store zips → apps/extension/dist/store
 | License | MIT | MPL-2.0 | AGPL-3.0 | AGPL-3.0 | MIT |
 
 Everyfold is not a read-it-later or archiving tool; if you want full-page archives, Karakeep and Linkwarden are great, and you can import from both.
+
+## FAQ
+
+### Is Everyfold free?
+
+Yes. Everyfold is MIT-licensed, and the server runs on Cloudflare's free Workers + D1 plan (see [Cloudflare Free plan](#cloudflare-free-plan) for the limits). The only optional cost is the AI categorizing: if you add an `ANTHROPIC_API_KEY`, Anthropic bills you for the Claude Haiku calls. Without a key, rules and learned categories do the sorting.
+
+### Where are my bookmarks stored? Who can see them?
+
+In the D1 database of the Worker you deployed, in your own Cloudflare account. There is no Everyfold account, no Everyfold-run server, no analytics and no telemetry. If you turn on the AI categorizing, your server sends the title and URL of bookmarks its rules could not place, with your category names, to Anthropic's API using your key. See [PRIVACY.md](PRIVACY.md).
+
+### Will it rearrange my existing bookmarks?
+
+No. On first connect your bookmarks are *copied* into the `Everyfold` folder (duplicates merged) and your own folders stay as they are. New bookmarks you save outside the folder are copied into a category by default; turn on *Move new bookmarks into Everyfold* if you'd rather have one copy.
+
+### Which browsers work?
+
+Chrome, Edge, Brave and other Chromium browsers (Manifest V3), and Firefox 140 or later. The Firefox build is new and has not been tried in a real Firefox yet, so treat it as a preview. Safari and mobile browsers are not supported.
+
+### Do I need to know Cloudflare or run a server?
+
+No terminal needed: the Deploy button creates the Worker and the database for you, and updates are one click in GitHub Actions. You do need a free Cloudflare account and a GitHub account.
+
+### How is it different from Floccus, Raindrop.io or Karakeep?
+
+Floccus syncs bookmarks through a backend you choose but doesn't organize them. Raindrop.io is a hosted bookmark service with its own app; Karakeep and Linkwarden are bookmark managers with their own app that you self-host with Docker (or use their paid cloud). Everyfold keeps your bookmarks in the browser's own bookmark bar and menus, brings its own free one-click server, and sorts new bookmarks into folders for you. See the [comparison table](#compared-to-other-bookmark-managers).
+
+### Can I use it together with Chrome's own bookmark sync?
+
+Yes; see the *Chrome account sync* note under [Install the extension](#2-install-the-extension).
 
 ## Known limitations
 
