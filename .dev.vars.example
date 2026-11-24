@@ -1,5 +1,9 @@
 # Copy to .dev.vars for local `pnpm dev`. In production set these with `wrangler secret put <NAME>`.
+# The Deploy to Cloudflare button asks for every key listed here and requires a value,
+# so only required secrets are listed as KEY= lines.
 # Admin token: used once per browser to register it as a device. Pick a long random string.
 ADMIN_TOKEN=
 # Optional: enables LLM categorizing (Claude Haiku). Without it, rules + learned categories are used.
-ANTHROPIC_API_KEY=
+# Uncomment for local use; after a button deploy add it in the dashboard
+# (Worker → Settings → Variables and Secrets) or with `wrangler secret put ANTHROPIC_API_KEY`.
+# ANTHROPIC_API_KEY=

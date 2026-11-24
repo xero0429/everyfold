@@ -24,12 +24,12 @@ There is no Everyfold account and no Everyfold-run server: **you deploy the serv
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xero0429/everyfold)
 
-The button copies this repository into **a new repository in your GitHub account** (a copy, not a GitHub fork), creates the D1 database, connects the new repository to [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) (every push to it redeploys) and runs the `deploy` script, which applies the D1 migrations before deploying (`wrangler d1 migrations apply DB --remote && wrangler deploy`). It asks for:
+The button copies this repository into **a new repository in your GitHub account** (a copy, not a GitHub fork), creates the D1 database, connects the new repository to [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) (every push to it redeploys) and runs the `deploy` script, which applies the D1 migrations before deploying (`wrangler d1 migrations apply DB --remote && wrangler deploy`). It asks for `ADMIN_TOKEN`:
 
 | Secret | |
 |---|---|
 | `ADMIN_TOKEN` | Required. You paste it into the extension once per browser. Use a long random string (`openssl rand -hex 32`). |
-| `ANTHROPIC_API_KEY` | Optional. Enables LLM categorizing. Without it, rules + learned categories are used. |
+| `ANTHROPIC_API_KEY` | Optional, not asked by the button. Enables LLM categorizing; without it, rules + learned categories are used. Add it after deploying: Worker → **Settings → Variables and Secrets** → Add (type Secret), or `npx wrangler secret put ANTHROPIC_API_KEY`. |
 
 You get a URL like `https://everyfold.<your-subdomain>.workers.dev`.
 
@@ -159,7 +159,7 @@ A Worker request on the Free plan may make at most 50 D1 calls. A push is writte
 
 ```sh
 corepack enable && pnpm install
-cp .dev.vars.example .dev.vars        # set ADMIN_TOKEN
+cp .dev.vars.example .dev.vars        # set ADMIN_TOKEN (optionally uncomment ANTHROPIC_API_KEY)
 pnpm dev                              # wrangler dev + local D1 on http://localhost:8787
 pnpm build:extension                  # then load dist/chrome and connect to http://localhost:8787
 pnpm typecheck && pnpm test           # unit + server (local D1) + extension engine tests

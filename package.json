@@ -32,9 +32,6 @@
     "bindings": {
       "ADMIN_TOKEN": {
         "description": "Token you paste into the extension once per browser to register it. Use a long random string, e.g. `openssl rand -hex 32`."
-      },
-      "ANTHROPIC_API_KEY": {
-        "description": "Optional. Enables LLM categorizing with Claude Haiku. Leave empty to use rules + learned categories only."
       }
     }
   }

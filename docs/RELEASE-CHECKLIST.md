@@ -23,13 +23,13 @@ What the docs say and how this repo matches it (https://developers.cloudflare.co
 | Provisions resources and fills in IDs for new resources (e.g. D1 `database_id`) | `[[d1_databases]] binding = "DB"`, `database_name = "everyfold"`, no `database_id` |
 | Migrations run only if the `deploy` script runs them, using the **binding** name | `"deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"` (binding `DB`) |
 | Custom `build`/`deploy` scripts are detected and pre-filled | root `package.json` has `deploy`; no `build` (Wrangler bundles) |
-| Secret prompts come from `.dev.vars.example` / `.env.example`; descriptions from `package.json` `cloudflare.bindings` | `.dev.vars.example` lists `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`; both described in `cloudflare.bindings` |
+| Secret prompts come from `.dev.vars.example` / `.env.example`; descriptions from `package.json` `cloudflare.bindings` | `.dev.vars.example` lists only `ADMIN_TOKEN` (the button requires every listed key); `ANTHROPIC_API_KEY` is a comment line, set after deploy (README) |
 | The button **clones** into a new repo (no fork link) and sets up Workers Builds | update path = `.github/workflows/update-from-upstream.yml` (no "Sync fork") |
 
 Run it for real:
 
 - [ ] Open the README button in a private window, logged in to a test Cloudflare account and GitHub.
-- [ ] The form shows the D1 database, `ADMIN_TOKEN` (required) and `ANTHROPIC_API_KEY` (optional) with their descriptions. Note whether leaving `ANTHROPIC_API_KEY` empty is accepted; if the form insists on a value, document "enter `-`"/remove it from `.dev.vars.example` and describe it only in the README.
+- [ ] The form shows the D1 database and `ADMIN_TOKEN` with its description, and no `ANTHROPIC_API_KEY` field (it is optional and set after deploy — see README).
 - [ ] Workers Builds detects pnpm (from `pnpm-lock.yaml` / `packageManager`) and the deploy command is `pnpm run deploy` (or `npm run deploy`). The build log shows `Migrations to be applied: 0001_init.sql, 0002_category_keys.sql` then a successful deploy. Wrangler skips the "Ok to proceed?" prompt when it is not attached to a terminal (CI); if the build hangs or fails at that step, record the log and fix the `deploy` script.
 - [ ] The new repo contains `.github/workflows/update-from-upstream.yml` (the docs don't say whether the Cloudflare GitHub App copies workflow files — without it there is no update path; if missing, document adding it by hand in the README).
 - [ ] The new repo's Wrangler config is still **one `wrangler.toml`** (no `wrangler.json`/`wrangler.jsonc` written by Cloudflare). The update script stops if not, so if Cloudflare switches format the README update path must change.

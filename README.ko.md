@@ -21,12 +21,12 @@ Everyfold 계정도, Everyfold 가 운영하는 서버도 없습니다. **서버
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xero0429/everyfold)
 
-버튼이 이 저장소를 **내 GitHub 계정의 새 저장소로 복사**하고(GitHub fork 가 아닌 복사본), D1 데이터베이스를 만들고, 새 저장소를 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) 에 연결한 뒤(그 저장소에 push 하면 다시 배포) `deploy` 스크립트를 돌립니다 — 배포 전에 D1 마이그레이션을 먼저 적용합니다(`wrangler d1 migrations apply DB --remote && wrangler deploy`). 그리고 비밀값을 묻습니다.
+버튼이 이 저장소를 **내 GitHub 계정의 새 저장소로 복사**하고(GitHub fork 가 아닌 복사본), D1 데이터베이스를 만들고, 새 저장소를 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) 에 연결한 뒤(그 저장소에 push 하면 다시 배포) `deploy` 스크립트를 돌립니다 — 배포 전에 D1 마이그레이션을 먼저 적용합니다(`wrangler d1 migrations apply DB --remote && wrangler deploy`). 그리고 비밀값 `ADMIN_TOKEN` 을 묻습니다.
 
 | 비밀값 | |
 |---|---|
 | `ADMIN_TOKEN` | 필수. 브라우저마다 한 번 확장에 붙여 넣습니다. 긴 무작위 문자열(`openssl rand -hex 32`). |
-| `ANTHROPIC_API_KEY` | 선택. LLM 분류를 켭니다. 없으면 규칙 + 학습만 씁니다. |
+| `ANTHROPIC_API_KEY` | 선택 — 버튼은 묻지 않습니다. LLM 분류를 켭니다(없으면 규칙 + 학습만). 배포 뒤 Worker → **Settings → Variables and Secrets** → Add(Secret 종류) 또는 `npx wrangler secret put ANTHROPIC_API_KEY` 로 넣습니다. |
 
 명령줄로 배포하려면:
 
@@ -35,6 +35,7 @@ git clone https://github.com/xero0429/everyfold && cd everyfold
 corepack enable && pnpm install
 npx wrangler d1 create everyfold        # 나온 database_id 를 wrangler.toml 에 넣기
 npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put ANTHROPIC_API_KEY   # 선택
 pnpm run deploy
 ```
 
@@ -139,7 +140,7 @@ curl -H "authorization: Bearer $T" -X POST "$S/snapshots/<id>/restore"          
 
 ```sh
 corepack enable && pnpm install
-cp .dev.vars.example .dev.vars        # ADMIN_TOKEN 설정
+cp .dev.vars.example .dev.vars        # ADMIN_TOKEN 설정 (선택: ANTHROPIC_API_KEY 주석 해제)
 pnpm dev                              # http://localhost:8787 (로컬 D1)
 pnpm build:extension
 pnpm typecheck && pnpm test
