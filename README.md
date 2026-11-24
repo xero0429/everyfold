@@ -98,10 +98,27 @@ That's it. Bookmarks sync when you change them, every 5 minutes, and when a brow
 
 The extension checks your server's version (`GET /version`) when it connects and about once an hour. If the server is older than the extension expects, the popup shows **Server is out of date** with a link here. Syncing keeps working; only a change that would otherwise damage data stops syncing ("Server update required") until you update.
 
-Because the Deploy button made a *copy* of this repository (not a fork), GitHub's *Sync fork* button is not available. Use the included workflow instead:
+Because the Deploy button made a *copy* of this repository (not a fork), GitHub's *Sync fork* button is not available. Use the update workflow instead.
+
+**Once, after deploying: add the update workflow to your copy.** The Deploy button copies the code but not the `.github/workflows/` folder, so your copy has no workflow yet. Add it one time (replace `<you>/<repo>` with your copy — the repository name you chose in the Deploy form):
+
+1. Open `https://github.com/<you>/<repo>/new/main?filename=.github/workflows/update-from-upstream.yml` (GitHub's *Add file → Create new file*, with the name already filled in).
+2. Paste the whole content of [update-from-upstream.yml](https://raw.githubusercontent.com/xero0429/everyfold/main/.github/workflows/update-from-upstream.yml) unchanged — it already points at this repository, whatever your copy is called — and select **Commit changes** (to `main`).
+
+   Or, with the [GitHub CLI](https://cli.github.com/) (it needs the `workflow` scope: `gh auth refresh -s workflow`):
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/xero0429/everyfold/main/.github/workflows/update-from-upstream.yml -o update-from-upstream.yml &&
+   gh api -X PUT repos/<you>/<repo>/contents/.github/workflows/update-from-upstream.yml \
+     -f message="Add update workflow" -f content="$(base64 < update-from-upstream.yml | tr -d '\n')"
+   ```
+
+This commit also triggers a normal redeploy; that is harmless. If **Actions** is off for your copy, turn it on under *Settings → Actions → General → Actions permissions*. The workflow asks for `contents: write` itself; if its push is refused (`403`), set *Settings → Actions → General → Workflow permissions* to **Read and write permissions**.
+
+**Each update:**
 
 1. Open your copy on GitHub → **Actions** → **Update from upstream** → **Run workflow** (branch `main`, upstream ref `main` or a release tag). The first time, GitHub may ask you to enable Actions for the repository.
-2. The workflow commits the latest Everyfold code to your repository. It keeps your Worker name and your D1 `database_name` / `database_id` from `wrangler.toml`, and leaves `.github/workflows/` alone (it lists any workflow files that differ from upstream; update those by hand if you want them). It also logs the files it removed and any lines of your `wrangler.toml` it did not keep (put variables in the Cloudflare dashboard, not in `wrangler.toml`). If it cannot keep your settings safely — no `wrangler.toml`, a `wrangler.json`/`wrangler.jsonc` instead, or your `database_id` would be lost — it stops without changing anything; then update by hand with the merge below.
+2. The workflow commits the latest Everyfold code to your repository. It keeps your Worker name and your D1 `database_name` / `database_id` from `wrangler.toml`, and leaves `.github/workflows/` alone — GitHub does not let a workflow push changes to workflow files — and lists any that differ from upstream; to update one, repeat the one-time step above with that file (edit it on GitHub and paste the new content). It also logs the files it removed and any lines of your `wrangler.toml` it did not keep (put variables in the Cloudflare dashboard, not in `wrangler.toml`). If it cannot keep your settings safely — no `wrangler.toml`, a `wrangler.json`/`wrangler.jsonc` instead, or your `database_id` would be lost — it stops without changing anything; then update by hand with the merge below.
 3. Workers Builds sees the push and redeploys. The `deploy` script applies new D1 migrations first, so the database schema is updated along with the code. Check the build under *Workers & Pages → everyfold → Deployments* in the Cloudflare dashboard.
 
 Want automatic updates? Uncomment the `schedule:` lines in `.github/workflows/update-from-upstream.yml`.

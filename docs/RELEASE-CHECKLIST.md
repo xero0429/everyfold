@@ -24,14 +24,15 @@ What the docs say and how this repo matches it (https://developers.cloudflare.co
 | Migrations run only if the `deploy` script runs them, using the **binding** name | `"deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy"` (binding `DB`) |
 | Custom `build`/`deploy` scripts are detected and pre-filled | root `package.json` has `deploy`; no `build` (Wrangler bundles) |
 | Secret prompts come from `.dev.vars.example` / `.env.example`; descriptions from `package.json` `cloudflare.bindings` | `.dev.vars.example` lists only `ADMIN_TOKEN` (the button requires every listed key); `ANTHROPIC_API_KEY` is a comment line, set after deploy (README) |
-| The button **clones** into a new repo (no fork link) and sets up Workers Builds | update path = `.github/workflows/update-from-upstream.yml` (no "Sync fork") |
+| The button **clones** into a new repo (no fork link) and sets up Workers Builds | update path = `.github/workflows/update-from-upstream.yml` (no "Sync fork"), added by hand once — the clone has no `.github/workflows/` (observed 2026-11-24; the docs don't say why) |
 
 Run it for real:
 
 - [ ] Open the README button in a private window, logged in to a test Cloudflare account and GitHub.
 - [ ] The form shows the D1 database and `ADMIN_TOKEN` with its description, and no `ANTHROPIC_API_KEY` field (it is optional and set after deploy — see README).
 - [ ] Workers Builds detects pnpm (from `pnpm-lock.yaml` / `packageManager`) and the deploy command is `pnpm run deploy` (or `npm run deploy`). The build log shows `Migrations to be applied: 0001_init.sql, 0002_category_keys.sql` then a successful deploy. Wrangler skips the "Ok to proceed?" prompt when it is not attached to a terminal (CI); if the build hangs or fails at that step, record the log and fix the `deploy` script.
-- [ ] The new repo contains `.github/workflows/update-from-upstream.yml` (the docs don't say whether the Cloudflare GitHub App copies workflow files — without it there is no update path; if missing, document adding it by hand in the README).
+- [ ] The new repo has **no** `.github/workflows/` (expected — observed 2026-11-24 at efd1bf1: the clone kept `.github/ISSUE_TEMPLATE` but no workflows). If a later run does copy them, simplify README *Updating your server*.
+- [ ] Follow README *Updating your server → Once, after deploying* in the new repo: the `new/main?filename=…` link opens with the name filled in; pasting the raw file unchanged and committing adds the workflow, and **Actions** lists *Update from upstream*. Also try the `gh api` one-liner on a second copy (exit 0, file content identical to upstream).
 - [ ] The new repo's Wrangler config is still **one `wrangler.toml`** (no `wrangler.json`/`wrangler.jsonc` written by Cloudflare). The update script stops if not, so if Cloudflare switches format the README update path must change.
 - [ ] In the new repo, `wrangler.toml` now has a `database_id` (committed by Cloudflare) — confirm `scripts/update-from-upstream.mjs` keeps it (it carries `name`, `database_name`, `database_id`).
 - [ ] `curl https://<worker>/version` → `{"service":"everyfold","version":"0.1.0","api":1,"minClientApi":1}`.

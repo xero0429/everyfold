@@ -92,10 +92,27 @@ Firefox 빌드는 만들어지고 타입 검사·Firefox 모양 북마크 트리
 
 확장은 연결할 때와 대략 1시간마다 서버 판(`GET /version`)을 봅니다. 서버가 확장이 기대하는 것보다 낡았으면 팝업에 **Server is out of date** 와 이 절 링크가 뜹니다. 동기화는 계속됩니다. 그대로 두면 데이터가 망가질 수 있는 변경일 때만 업데이트할 때까지 동기화를 멈춥니다("Server update required").
 
-Deploy 버튼이 만든 것은 fork 가 아니라 *복사본*이라 GitHub 의 *Sync fork* 버튼이 없습니다. 대신 들어 있는 워크플로를 씁니다.
+Deploy 버튼이 만든 것은 fork 가 아니라 *복사본*이라 GitHub 의 *Sync fork* 버튼이 없습니다. 대신 업데이트 워크플로를 씁니다.
+
+**배포한 뒤 한 번만: 내 복사본에 업데이트 워크플로 넣기.** Deploy 버튼은 코드는 복사하지만 `.github/workflows/` 폴더는 복사하지 않아서, 복사본에는 아직 워크플로가 없습니다. 한 번만 넣어 줍니다(`<you>/<repo>` 는 내 복사본 — Deploy 화면에서 정한 저장소 이름 — 으로 바꿉니다).
+
+1. `https://github.com/<you>/<repo>/new/main?filename=.github/workflows/update-from-upstream.yml` 을 엽니다(GitHub 의 *Add file → Create new file* 에 파일 이름이 미리 채워진 화면).
+2. [update-from-upstream.yml](https://raw.githubusercontent.com/xero0429/everyfold/main/.github/workflows/update-from-upstream.yml) 내용 전체를 고치지 말고 붙여 넣고 **Commit changes**(`main` 에) 를 누릅니다. 이 파일은 이미 이 저장소를 가리키므로 복사본 이름이 무엇이든 그대로 동작합니다.
+
+   또는 [GitHub CLI](https://cli.github.com/) 로(`workflow` 권한이 필요합니다: `gh auth refresh -s workflow`):
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/xero0429/everyfold/main/.github/workflows/update-from-upstream.yml -o update-from-upstream.yml &&
+   gh api -X PUT repos/<you>/<repo>/contents/.github/workflows/update-from-upstream.yml \
+     -f message="Add update workflow" -f content="$(base64 < update-from-upstream.yml | tr -d '\n')"
+   ```
+
+이 커밋으로도 평소처럼 다시 배포되는데, 문제없습니다. 복사본에 **Actions** 가 꺼져 있으면 *Settings → Actions → General → Actions permissions* 에서 켭니다. 워크플로는 `contents: write` 권한을 스스로 요청합니다. 그래도 push 가 거절되면(`403`) *Settings → Actions → General → Workflow permissions* 를 **Read and write permissions** 로 바꿉니다.
+
+**업데이트할 때마다:**
 
 1. GitHub 의 내 복사본 → **Actions** → **Update from upstream** → **Run workflow**(브랜치 `main`, upstream ref 는 `main` 또는 릴리스 태그). 처음이면 그 저장소에서 Actions 를 켜라고 할 수 있습니다.
-2. 워크플로가 최신 Everyfold 코드를 내 저장소에 커밋합니다. `wrangler.toml` 의 Worker 이름과 D1 `database_name`·`database_id` 는 내 값을 그대로 두고, `.github/workflows/` 는 건드리지 않습니다(upstream 과 다른 워크플로 파일은 목록으로 알려 주니 원하면 직접 고칩니다). 지운 파일 목록과, 내 `wrangler.toml` 에서 옮기지 않은 줄도 로그에 남깁니다(변수는 `wrangler.toml` 이 아니라 Cloudflare 대시보드에서 정하세요). 내 설정을 안전하게 지킬 수 없을 때 — `wrangler.toml` 이 없거나, 대신 `wrangler.json`/`wrangler.jsonc` 가 있거나, `database_id` 가 사라질 상황 — 에는 아무것도 바꾸지 않고 멈춥니다. 그때는 아래 merge 로 직접 업데이트합니다.
+2. 워크플로가 최신 Everyfold 코드를 내 저장소에 커밋합니다. `wrangler.toml` 의 Worker 이름과 D1 `database_name`·`database_id` 는 내 값을 그대로 두고, `.github/workflows/` 는 건드리지 않습니다 — GitHub 는 워크플로가 워크플로 파일 변경을 push 하지 못하게 합니다. upstream 과 다른 워크플로 파일은 목록으로 알려 주니, 바꾸려면 위의 한 번 넣기처럼 GitHub 에서 그 파일을 열어 새 내용을 붙여 넣습니다. 지운 파일 목록과, 내 `wrangler.toml` 에서 옮기지 않은 줄도 로그에 남깁니다(변수는 `wrangler.toml` 이 아니라 Cloudflare 대시보드에서 정하세요). 내 설정을 안전하게 지킬 수 없을 때 — `wrangler.toml` 이 없거나, 대신 `wrangler.json`/`wrangler.jsonc` 가 있거나, `database_id` 가 사라질 상황 — 에는 아무것도 바꾸지 않고 멈춥니다. 그때는 아래 merge 로 직접 업데이트합니다.
 3. push 를 본 Workers Builds 가 다시 배포합니다. `deploy` 스크립트가 새 D1 마이그레이션을 먼저 적용하므로 DB 스키마도 함께 올라갑니다. Cloudflare 대시보드 *Workers & Pages → everyfold → Deployments* 에서 확인합니다.
 
 자동으로 받고 싶으면 `.github/workflows/update-from-upstream.yml` 의 `schedule:` 줄 주석을 풉니다.
