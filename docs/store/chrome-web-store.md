@@ -9,7 +9,7 @@ Store icon (128×128 PNG): `apps/extension/static/icons/icon-128.png`.
 Privacy policy URL: `https://github.com/xero0429/everyfold/blob/main/PRIVACY.md`
 Publisher display name: **Logan** · account type: **non-trader**.
 
-Checked against the manifest of 0.1.1 (`apps/extension/scripts/build.mjs`): `permissions` = `bookmarks`, `storage`, `alarms`; no `host_permissions`, no `optional_permissions`, no content scripts. The code also uses `runtime` messaging and `windows.onFocusChanged` (sync when a window gets focus), which need no permission.
+Checked against the manifest of 0.1.2 (`apps/extension/scripts/build.mjs`): `permissions` = `bookmarks`, `storage`, `alarms`; no `host_permissions`, no `optional_permissions`, no content scripts. The code also uses `runtime` messaging and `windows.onFocusChanged` (sync when a window gets focus), which need no permission.
 
 ## Store listing
 
@@ -30,7 +30,7 @@ Checked against the manifest of 0.1.1 (`apps/extension/scripts/build.mjs`): `per
 ```
 Everyfold keeps one bookmark library on a server you own and mirrors it into an "Everyfold" folder in every browser you connect. New bookmarks are sorted into category folders automatically.
 
-You need your own Everyfold server first. It is free and open source: a single Cloudflare Worker + D1 database you deploy to your own Cloudflare account with one click from GitHub (github.com/xero0429/everyfold). The free Cloudflare plan is enough for personal use. There is no Everyfold account and no Everyfold company server — your bookmarks go only to the server you deploy.
+You need your own Everyfold server first. It is free and open source: a single Cloudflare Worker + D1 database you deploy to your own Cloudflare account with one click from GitHub (github.com/xero0429/everyfold). For personal use the free Cloudflare plan is usually enough (check Cloudflare's current limits). There is no Everyfold account and no Everyfold company server — your bookmarks go only to the server you deploy.
 
 • Real browser bookmarks — the Everyfold folder lives in your normal bookmarks, no new app to open.
 • Your existing folders are never touched — on first connect your bookmarks are copied into the library and duplicates are merged.
@@ -53,7 +53,7 @@ In the dashboard, switch the language dropdown at the top of *Store listing* to 
 ```
 Everyfold 는 북마크 라이브러리 하나를 내가 가진 서버에 두고, 연결한 모든 브라우저의 "Everyfold" 폴더에 똑같이 비춰 줍니다. 새 북마크는 카테고리 폴더로 자동 정리됩니다.
 
-먼저 내 Everyfold 서버가 있어야 합니다. 무료 오픈 소스이며, GitHub(github.com/xero0429/everyfold)에서 버튼 한 번으로 내 Cloudflare 계정에 배포하는 Cloudflare Worker + D1 데이터베이스 하나입니다. 개인 사용은 Cloudflare 무료 요금제로 충분합니다. Everyfold 계정도, Everyfold 회사 서버도 없습니다 — 북마크는 내가 배포한 서버로만 갑니다.
+먼저 내 Everyfold 서버가 있어야 합니다. 무료 오픈 소스이며, GitHub(github.com/xero0429/everyfold)에서 버튼 한 번으로 내 Cloudflare 계정에 배포하는 Cloudflare Worker + D1 데이터베이스 하나입니다. 개인 사용은 보통 Cloudflare 무료 요금제로 충분합니다(한도는 Cloudflare 의 현재 안내를 확인하세요). Everyfold 계정도, Everyfold 회사 서버도 없습니다 — 북마크는 내가 배포한 서버로만 갑니다.
 
 • 진짜 브라우저 북마크 — Everyfold 폴더가 평소 북마크 안에 있어서 따로 앱을 열 필요가 없습니다.
 • 기존 폴더는 건드리지 않습니다 — 처음 연결할 때 북마크를 라이브러리로 복사하고 중복은 합칩니다.
