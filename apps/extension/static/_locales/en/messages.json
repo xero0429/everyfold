@@ -1,0 +1,6 @@
+{
+  "extDescription": {
+    "message": "Sync one bookmark library across Chrome, Edge, Brave and Firefox, auto-sorted into folders — on your own Cloudflare Worker.",
+    "description": "Manifest description = Chrome Web Store summary (max 132 characters)."
+  }
+}

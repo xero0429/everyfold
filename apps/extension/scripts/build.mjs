@@ -10,7 +10,9 @@ const pkg = JSON.parse((await import('node:fs')).readFileSync(join(root, 'packag
 const base = {
   manifest_version: 3,
   name: 'Everyfold',
-  description: 'One bookmark library for every browser, auto-organized.',
+  // 설명은 static/_locales/<locale>/messages.json — 스토어 요약(≤132자)도 이것. ko 가 있어야 대시보드에서 한국어 등록 문안을 넣을 수 있다.
+  default_locale: 'en',
+  description: '__MSG_extDescription__',
   version: pkg.version,
   permissions: ['bookmarks', 'storage', 'alarms'],
   icons: { 16: 'icons/icon-16.png', 32: 'icons/icon-32.png', 48: 'icons/icon-48.png', 128: 'icons/icon-128.png' },

@@ -1,6 +1,6 @@
 {
   "name": "@everyfold/extension",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,7 +25,8 @@
     "package:firefox": "node scripts/package.mjs firefox",
     "package:source": "node scripts/package.mjs source",
     "store-shots": "node scripts/store-shots.mjs",
-    "readme-media": "node scripts/readme-media.mjs"
+    "readme-media": "node scripts/readme-media.mjs",
+    "promo-tile": "node scripts/promo-tile.mjs"
   },
   "dependencies": {
     "@everyfold/core": "workspace:*",

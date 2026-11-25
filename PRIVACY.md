@@ -1,6 +1,6 @@
 # Everyfold privacy policy
 
-_Last updated: 2026-11-23_
+_Last updated: 2026-11-25_
 
 Everyfold is a browser extension plus a server that **you deploy to your own Cloudflare account**. There is no Everyfold company service in between: the developer of Everyfold does not run a server for you, has no account system, and receives none of your data.
 
@@ -14,6 +14,8 @@ Everyfold is a browser extension plus a server that **you deploy to your own Clo
 | Sync state (last revision, mapping between browser and server ids, settings) | To sync incrementally | Stored locally in the extension |
 
 The extension does **not** collect analytics or telemetry, does not use cookies or ads, does not read the pages you visit or your browsing history, and does not send anything to the developer or to any third party.
+
+In the Chrome Web Store data-use form, bookmark titles and URLs are declared under *Web history*, the closest listed category (there is no "bookmarks" category). The extension still does not read your browsing history.
 
 ## What your server stores
 
