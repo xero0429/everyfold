@@ -162,7 +162,7 @@ Deploy 버튼이 만든 것은 fork 가 아니라 *복사본*이라 GitHub 의 *
 **업데이트할 때마다:**
 
 1. GitHub 의 내 복사본 → **Actions** → **Update from upstream** → **Run workflow**(브랜치 `main`, upstream ref 는 `main` 또는 릴리스 태그). 처음이면 그 저장소에서 Actions 를 켜라고 할 수 있습니다.
-2. 워크플로가 최신 Everyfold 코드를 내 저장소에 커밋합니다. `wrangler.toml` 의 Worker 이름과 D1 `database_name`·`database_id` 는 내 값을 그대로 두고, `.github/workflows/` 는 건드리지 않습니다 — GitHub 는 워크플로가 워크플로 파일 변경을 push 하지 못하게 합니다. upstream 과 다른 워크플로 파일은 목록으로 알려 주니, 바꾸려면 위의 한 번 넣기처럼 GitHub 에서 그 파일을 열어 새 내용을 붙여 넣습니다. 지운 파일 목록과, 내 `wrangler.toml` 에서 옮기지 않은 줄도 로그에 남깁니다(변수는 `wrangler.toml` 이 아니라 Cloudflare 대시보드에서 정하세요). 내 설정을 안전하게 지킬 수 없을 때 — `wrangler.toml` 이 없거나, 대신 `wrangler.json`/`wrangler.jsonc` 가 있거나, `database_id` 가 사라질 상황 — 에는 아무것도 바꾸지 않고 멈춥니다. 그때는 아래 merge 로 직접 업데이트합니다.
+2. 워크플로가 최신 Everyfold 코드를 내 저장소에 커밋합니다. `wrangler.toml` 의 Worker 이름과 D1 `database_name`·`database_id`, `package.json` 의 프로젝트 `name` 은 내 값을 그대로 두고, `.github/workflows/` 는 건드리지 않습니다 — GitHub 는 워크플로가 워크플로 파일 변경을 push 하지 못하게 합니다. upstream 과 다른 워크플로 파일은 목록으로 알려 주니, 바꾸려면 위의 한 번 넣기처럼 GitHub 에서 그 파일을 열어 새 내용을 붙여 넣습니다. 지운 파일 목록과, 내 `wrangler.toml` 에서 옮기지 않은 줄도 로그에 남깁니다(변수는 `wrangler.toml` 이 아니라 Cloudflare 대시보드에서 정하세요). 내 설정을 안전하게 지킬 수 없을 때 — `wrangler.toml` 이 없거나, 대신 `wrangler.json`/`wrangler.jsonc` 가 있거나, `database_id` 가 사라질 상황 — 에는 아무것도 바꾸지 않고 멈춥니다. 그때는 아래 merge 로 직접 업데이트합니다.
 3. push 를 본 Workers Builds 가 다시 배포합니다. `deploy` 스크립트가 새 D1 마이그레이션을 먼저 적용하므로 DB 스키마도 함께 올라갑니다. Cloudflare 대시보드 *Workers & Pages → everyfold → Deployments* 에서 확인합니다.
 
 자동으로 받고 싶으면 `.github/workflows/update-from-upstream.yml` 의 `schedule:` 줄 주석을 풉니다.

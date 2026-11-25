@@ -7,6 +7,7 @@
 //   2) wrangler.toml 에서 배포 때 정해진 값 — Worker 이름, D1 database_name / database_id — 은 내 것을 그대로 둔다.
 //      wrangler.toml 이 없거나 wrangler.json(c) 가 있거나 database_id 를 지킬 수 없으면 아무것도 바꾸지 않고 멈춘다.
 //      그 밖의 내 수정(예: [vars])은 옮기지 않고 경고로 알린다. upstream 에서 지운 파일 목록도 로그에 남긴다.
+//      package.json 의 `name`(Deploy 버튼이 프로젝트 이름으로 바꾼 값)도 내 것을 그대로 둔다.
 //   3) .github/workflows/ 는 건드리지 않는다(Actions 의 GITHUB_TOKEN 은 워크플로 파일을 push 할 수 없다). 달라진 게 있으면 알려 준다.
 //   4) 바뀐 게 있으면 커밋 한 개를 만든다. push 는 부르는 쪽(워크플로)이 한다 → Workers Builds 가 다시 배포하면서
 //      `deploy` 스크립트가 D1 마이그레이션을 먼저 적용한다.
@@ -92,6 +93,31 @@ export function droppedLines(mine, result) {
     .filter((l) => l && !l.startsWith('#') && !keep.has(l));
 }
 
+/* ───────── package.json: Deploy 버튼이 바꾼 `name` 만 옮긴다 ───────── */
+const NAME_RE = /^(\s*"name"\s*:\s*)"(?:[^"\\]|\\.)*"/m;
+/**
+ * upstream 의 package.json(theirs) 에 내 최상위 `name`(mine) 을 얹는다. 나머지는 upstream 그대로.
+ * 줄 모양은 그대로 두고 name 값만 바꾼다(그게 안 되면 JSON 을 다시 써서 바꾼다). 어느 쪽이든 JSON 이 아니면 theirs 그대로.
+ */
+export function carryPackageJson(mine, theirs) {
+  let myName, theirObj;
+  try {
+    myName = JSON.parse(mine)?.name;
+    theirObj = JSON.parse(theirs);
+  } catch {
+    return { text: theirs, carried: [] };
+  }
+  if (typeof myName !== 'string' || !theirObj || typeof theirObj !== 'object' || theirObj.name === myName) return { text: theirs, carried: [] };
+  const quoted = JSON.stringify(myName);
+  let text = theirs.replace(NAME_RE, (_m, pre) => `${pre}${quoted}`);
+  try {
+    if (JSON.parse(text).name !== myName) throw new Error();
+  } catch {
+    text = `${JSON.stringify({ ...theirObj, name: myName }, null, 2)}\n`;
+  }
+  return { text, carried: ['package.json name'] };
+}
+
 const dbId = (toml) => {
   const s = dbSection(sections(toml));
   return s ? getKey(s.lines.join('\n'), 'database_id') : undefined;
@@ -123,6 +149,10 @@ export function updateFromUpstream({ upstream = DEFAULT_UPSTREAM, ref = 'main', 
   const myId = dbId(myToml);
   if (myId && dbId(tomlResult.text) !== myId)
     throw new Error(`could not keep your D1 database_id ${myId} in the new wrangler.toml; ${HAND_UPDATE}`);
+  const pkgResult =
+    existsSync(`${cwd}/package.json`) && theirsFiles.has('package.json')
+      ? carryPackageJson(readFileSync(`${cwd}/package.json`, 'utf8'), g(['show', 'FETCH_HEAD:package.json']))
+      : { carried: [] };
 
   // 1) upstream 에 없는 내 파일은 지운다(보존 경로 제외)
   const removed = mineFiles.filter((f) => !theirsFiles.has(f) && !preserved(f));
@@ -133,7 +163,12 @@ export function updateFromUpstream({ upstream = DEFAULT_UPSTREAM, ref = 'main', 
   // 3) wrangler.toml 의 배포 값 옮기기
   writeFileSync(`${cwd}/wrangler.toml`, tomlResult.text);
   g(['add', 'wrangler.toml']);
-  const carried = tomlResult.carried;
+  // 3b) package.json 의 name 옮기기
+  if (pkgResult.carried.length) {
+    writeFileSync(`${cwd}/package.json`, pkgResult.text);
+    g(['add', 'package.json']);
+  }
+  const carried = [...tomlResult.carried, ...pkgResult.carried];
   const dropped = droppedLines(myToml, tomlResult.text);
   // 4) 보존 경로 중 upstream 과 다른 것 알리기
   const wfDiff = [...new Set([...theirsFiles].filter(preserved).concat(mineFiles.filter(preserved)))].filter((f) => {
@@ -143,7 +178,7 @@ export function updateFromUpstream({ upstream = DEFAULT_UPSTREAM, ref = 'main', 
 
   const changed = lines(g(['diff', '--cached', '--name-only']));
   log(`upstream ${upstream} ${ref} @ ${sha.slice(0, 12)}`);
-  if (carried.length) log(`kept from your wrangler.toml: ${carried.join(', ')}`);
+  if (carried.length) log(`kept from your copy: ${carried.join(', ')}`);
   if (dropped.length)
     log(`warning: these lines of your wrangler.toml are not in the new one (only name, database_name, database_id are kept — set variables in the Cloudflare dashboard instead): ${dropped.join(' | ')}`);
   if (removed.length) log(`removed (no longer in upstream): ${removed.join(', ')}`);
