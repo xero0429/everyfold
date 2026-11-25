@@ -52,7 +52,7 @@ Run it for real:
 - [ ] Developer account registered (one-time US$5 fee), 2-step verification on.
 - [ ] `pnpm package:chrome` → upload `apps/extension/dist/store/everyfold-chrome-<version>.zip`.
 - [ ] Listing text, single purpose, permission reasons, data-use answers: `docs/store/chrome-web-store.md`.
-- [ ] Screenshots: `docs/store/screenshots/*.png` (1280×800). Icon 128×128: `apps/extension/static/icons/icon-128.png`. Optional small promo tile 440×280 (not made yet).
+- [ ] Screenshots: `docs/store/screenshots/*.png` (1280×800). Icon 128×128: `apps/extension/static/icons/icon-128.png`. Small promo tile 440×280: `docs/store/promo-tile-440x280.png`. Korean listing text: `docs/store/chrome-web-store.md` → *Korean listing (ko)*.
 - [ ] Privacy policy URL: `https://github.com/xero0429/everyfold/blob/main/PRIVACY.md` (needs the public repo).
 - [ ] Deploy a throwaway review server and put its URL + admin token in *Test instructions*; delete it after approval.
 - [ ] After approval: put the store link in README (*Install the extension*) and the popup's "How to update the extension" link.
