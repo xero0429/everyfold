@@ -5,9 +5,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { carryWranglerToml, updateFromUpstream } from '../../../scripts/update-from-upstream.mjs';
+import { carryPackageJson, carryWranglerToml, updateFromUpstream } from '../../../scripts/update-from-upstream.mjs';
 
 const repoToml = readFileSync(fileURLToPath(new URL('../../../wrangler.toml', import.meta.url)), 'utf8');
+const repoPkg = readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8');
+// Deploy 버튼이 복제본 package.json 에 써 넣는 값(프로젝트 이름)
+const deployedPkg = (pkg) => pkg.replace(/^  "name": "everyfold",$/m, '  "name": "my-bookmarks",');
 const tmp = mkdtempSync(join(tmpdir(), 'everyfold-update-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -53,9 +56,25 @@ describe('carryWranglerToml', () => {
   });
 });
 
+describe('carryPackageJson', () => {
+  it('keeps my package.json name, takes every other field from upstream, keeps the file layout', () => {
+    expect(deployedPkg(repoPkg)).not.toBe(repoPkg);
+    const theirs = repoPkg.replace('"wrangler": "4.166.0"', '"wrangler": "4.200.0"');
+    const r = carryPackageJson(deployedPkg(repoPkg), theirs);
+    expect(r.carried).toEqual(['package.json name']);
+    expect(r.text).toBe(theirs.replace('"name": "everyfold"', '"name": "my-bookmarks"'));
+    expect(JSON.parse(r.text).devDependencies.wrangler).toBe('4.200.0');
+  });
+  it('is a no-op on an unchanged copy or unreadable JSON', () => {
+    expect(carryPackageJson(repoPkg, repoPkg)).toEqual({ text: repoPkg, carried: [] });
+    expect(carryPackageJson('not json', repoPkg)).toEqual({ text: repoPkg, carried: [] });
+  });
+});
+
 describe('updateFromUpstream (git)', () => {
   const v1 = {
     'wrangler.toml': repoToml,
+    'package.json': repoPkg,
     'apps/server/src/index.ts': 'v1\n',
     'apps/server/migrations/0001_init.sql': 'create table a(x);\n',
     'old-file.txt': 'removed upstream later\n',
@@ -63,7 +82,7 @@ describe('updateFromUpstream (git)', () => {
   };
   const up = initRepo('upstream', v1);
   // 복제본 = 같은 내용의 "새" 저장소(역사 공유 없음) + Deploy 버튼이 쓴 wrangler 값
-  const mine = initRepo('mine', { ...v1, 'wrangler.toml': deployed(repoToml) });
+  const mine = initRepo('mine', { ...v1, 'wrangler.toml': deployed(repoToml), 'package.json': deployedPkg(repoPkg) });
 
   it('brings in upstream changes, deletions and new migrations; keeps deploy values and workflows; commits once', () => {
     write(up, {
@@ -71,6 +90,7 @@ describe('updateFromUpstream (git)', () => {
       'apps/server/migrations/0002_more.sql': 'create table b(y);\n',
       '.github/workflows/ci.yml': 'ci v2\n',
       'wrangler.toml': repoToml.replace('crons = ["0 18 * * *"]', 'crons = ["0 19 * * *"]'),
+      'package.json': repoPkg.replace('"wrangler": "4.166.0"', '"wrangler": "4.200.0"'),
     });
     git(up, 'rm', '-q', 'old-file.txt');
     git(up, 'add', '-A');
@@ -86,6 +106,11 @@ describe('updateFromUpstream (git)', () => {
     expect(toml).toContain('crons = ["0 19 * * *"]');
     expect(toml).toContain('database_id = "1111-2222"');
     expect(toml).toContain('name = "my-bookmarks"');
+    // package.json: name 은 내 것, 나머지는 upstream
+    const pkg = JSON.parse(readFileSync(join(mine, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('my-bookmarks');
+    expect(pkg.devDependencies.wrangler).toBe('4.200.0');
+    expect(r.carried).toContain('package.json name');
     // 워크플로는 그대로 두고 알려 준다
     expect(readFileSync(join(mine, '.github/workflows/ci.yml'), 'utf8')).toBe('ci v1\n');
     expect(r.workflowsDiffer).toEqual(['.github/workflows/ci.yml']);

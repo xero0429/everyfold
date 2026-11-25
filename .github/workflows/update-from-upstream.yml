@@ -1,7 +1,7 @@
 # Your copy of Everyfold → the latest upstream version.
 # The "Deploy to Cloudflare" button creates a *new* repository (not a GitHub fork), so there is no "Sync fork" button.
 # Run this from the Actions tab: Actions → "Update from upstream" → Run workflow. It commits the upstream changes to your
-# default branch (keeping your Worker name and D1 database id from wrangler.toml), and Workers Builds redeploys — the
+# default branch (keeping your Worker name and D1 database id from wrangler.toml, and the package.json name), and Workers Builds redeploys — the
 # `deploy` script applies new D1 migrations before deploying.
 name: Update from upstream
 on:
