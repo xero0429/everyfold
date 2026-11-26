@@ -1,5 +1,5 @@
 import {
-  clampTitle, decideDelete, decideFieldMerge, isMassDelete, isParsableUrl, MASS_DELETE_RATIO, MAX_URL_LENGTH, normalizeUrl,
+  clampTitle, decideDelete, SESSIONS_KEY, sessionsFolderName, decideFieldMerge, isMassDelete, isParsableUrl, MASS_DELETE_RATIO, MAX_URL_LENGTH, normalizeUrl,
   type MassDeleteError, type NodeRef, type OpResult, type PullResponse, type PushRequest, type PushResponse, type ServerNode, type SyncOp,
 } from '@everyfold/core';
 import { rowToNode, rowToState, Store, type NodeRow, type NodeState } from './store.js';
@@ -59,6 +59,16 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
   const rows = new Map<string, NodeRow>();
   for (const r of await store.getMany([...opIds, ...refIds])) rows.set(r.id, r);
   for (const r of await store.liveFolders()) rows.set(r.id, r);
+  /** 폴더 id 가 세션 폴더(cat_key='sessions') 이거나 그 아래인가 — rows(작업 사본)를 따라 올라가므로 같은 push 안에서 만든 폴더도 본다 */
+  const inSessions = (folderId: string | null | undefined) => {
+    for (let p = folderId ?? null, i = 0; p && i < 1000; i++) {
+      const r = rows.get(p);
+      if (!r || r.deleted) return false;
+      if (r.cat_key === SESSIONS_KEY) return true;
+      p = r.parent_id;
+    }
+    return false;
+  };
   const descendantsOfDeleted = delIds.length
     ? (await db
         .prepare(
@@ -77,8 +87,9 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
       .bind(json([...new Set([...createNorms, ...urlNorms])]))
       .all<NodeRow>();
     for (const row of r.results) {
-      if (!byNorm.has(row.norm_url!)) byNorm.set(row.norm_url!, rows.get(row.id) ?? row);
       if (!rows.has(row.id)) rows.set(row.id, row);
+      // 세션 폴더 안 북마크(저장한 탭)는 합치기 대상이 아니다 — 라이브러리 북마크를 세션으로 끌고 가거나 그 반대가 되지 않게
+      if (!byNorm.has(row.norm_url!) && !inSessions(row.parent_id)) byNorm.set(row.norm_url!, rows.get(row.id) ?? row);
     }
   }
   const mapped = new Map<string, string>();
@@ -147,6 +158,7 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
     }
     for (const name of suggest.keys()) await addNewCategorySuggestion(store, env, name, []);
   }
+  const sessionsTitle = ops.some((o) => o.op === 'create' && o.key === SESSIONS_KEY) ? sessionsFolderName(await serverLocale(store, env)) : '';
   const untitled = ops.some((o) => o.op === 'create' && o.kind === 'folder' && !(o.title ?? '').trim()) ? t(await serverLocale(store, env), 'untitledFolder') : '';
 
   /* ── 2) 메모리에서 판정 ── */
@@ -163,17 +175,18 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
     maxPos.set(parent, p);
     return p;
   };
-  const write = (after: NodeState, op: string, before: NodeState | null) => {
-    stmts.push(...store.writeStmts(after, { op, deviceId, batchId, before }));
+  const write = (after: NodeState, op: string, before: NodeState | null, catKey?: string) => {
+    stmts.push(...store.writeStmts(after, { op, deviceId, batchId, before, ...(catKey ? { catKey } : {}) }));
     revSlot.set(after.id, stmts.length - 1);
     const prev = rows.get(after.id);
     const row: NodeRow = {
       ...(prev ?? { created_at: now, rev: 0 }), id: after.id, kind: after.kind, parent_id: after.parentId, title: after.title, url: after.url,
       norm_url: after.kind === 'bookmark' && after.url ? normalizeUrl(after.url) : null, position: after.position, deleted: after.deleted ? 1 : 0, updated_at: now,
+      ...(catKey ? { cat_key: catKey } : {}),
     } as NodeRow;
     rows.set(after.id, row);
     if (prev?.norm_url && byNorm.get(prev.norm_url)?.id === after.id) byNorm.delete(prev.norm_url);
-    if (row.norm_url && !row.deleted && !byNorm.has(row.norm_url)) byNorm.set(row.norm_url, row);
+    if (row.norm_url && !row.deleted && !byNorm.has(row.norm_url) && !inSessions(row.parent_id)) byNorm.set(row.norm_url, row);
   };
   const remember = (clientRef: string, serverId: string) => {
     created.set(clientRef, serverId);
@@ -245,6 +258,26 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
       if (op.op === 'create') {
         const parent = resolveRef(op.parent);
         let parentId = parent.ok ? parent.id : null;
+        if (op.kind === 'folder' && op.key !== undefined) {
+          // 예약 폴더(지금은 세션 폴더 하나): 키로 찾고, 없으면 서버 로캘 이름으로 루트에 만든다. 이름이 아니라 키가 정체성이다.
+          if (op.key !== SESSIONS_KEY || op.parent !== null) {
+            results.push({ index, status: 'rejected', reason: 'unknown reserved folder' });
+            continue;
+          }
+          let existing: NodeRow | undefined;
+          for (const r of rows.values()) if (r.kind === 'folder' && !r.deleted && r.cat_key === SESSIONS_KEY) existing = existing && existing.created_at <= r.created_at ? existing : r;
+          if (existing) {
+            remember(op.clientRef, existing.id);
+            results.push({ index, status: 'merged', serverId: existing.id, rev: existing.rev, reason: 'reserved folder exists', _node: existing.id });
+            continue;
+          }
+          const id = crypto.randomUUID();
+          const title = sessionsTitle;
+          write({ id, kind: 'folder', parentId: null, title, url: null, position: op.position ?? posFor(null), deleted: false }, 'create', null, SESSIONS_KEY);
+          remember(op.clientRef, id);
+          results.push({ index, status: 'applied', serverId: id, _node: id });
+          continue;
+        }
         if (op.kind === 'folder') {
           const title = clampTitle((op.title ?? '').trim()) || untitled;
           const existing = findLiveFolder(parentId, title);
@@ -271,7 +304,8 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
         }
         if (autoCat.has(index)) parentId = autoCat.get(index) ?? null;
         const title = clampTitle(op.title);
-        const dup = byNorm.get(normalizeUrl(url));
+        // 세션 안에 만드는 탭 북마크는 늘 새로 만든다(라이브러리·다른 세션에 같은 주소가 있어도 합치지 않는다)
+        const dup = inSessions(parentId) ? undefined : byNorm.get(normalizeUrl(url));
         if (dup) {
           // 같은 북마크가 이미 있다 → 새로 만들지 않고 합친다. 기기가 다른 폴더에 명시적으로 넣었다면 그 위치로 옮긴다.
           if (!op.autoCategorize && dup.parent_id !== parentId) {

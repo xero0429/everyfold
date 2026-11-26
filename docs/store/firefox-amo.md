@@ -9,15 +9,17 @@
 - Screenshots: same 1280×800 set as Chrome (`docs/store/screenshots/`).
 - License: MIT. Categories: *Bookmarks*. Support site: https://github.com/xero0429/everyfold/issues
 
-**Summary** (≤ 250 chars):
+**Summary** (≤ 250 chars; 249):
 
-> Sync one bookmark library across Firefox and Chromium browsers, auto-sorted into folders — on a free Cloudflare Worker you deploy yourself. No account, no third-party server: your bookmarks go only to your own server.
+> Save your open windows and reopen them in Firefox or any Chromium browser, on this computer or another — plus one bookmark library synced and auto-sorted on a free Cloudflare Worker you deploy yourself. No account: data goes only to your own server.
 
 **Description:** reuse the Chrome detailed description (`docs/store/chrome-web-store.md`).
 
 **Data collection** — required for new AMO add-ons since 2025-11-03. The manifest declares
 `browser_specific_settings.gecko.data_collection_permissions = { required: ["bookmarksInfo", "authenticationInfo"] }`:
 bookmarks and the device/admin token leave the add-on, although only to the server the user configured (Mozilla's docs do not carve out self-hosted servers, so we declare it). Firefox shows these in its built-in consent prompt at install time.
+
+Since 0.1.3 the manifest also has `optional_permissions: ["tabs"]` and `data_collection_permissions.optional = ["browsingActivity"]` (MDN category for visited URLs/tab addresses) for *Save open windows*: both are requested together with `permissions.request({ permissions: ["tabs"], data_collection: ["browsingActivity"] })` only when the user first clicks *Save open windows*. Saved tab addresses become bookmarks and go only to the user's own server. Declining leaves everything else working.
 
 ## Notes to reviewer (paste into "Notes for reviewers")
 

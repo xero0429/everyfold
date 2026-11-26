@@ -15,6 +15,8 @@ const base = {
   description: '__MSG_extDescription__',
   version: pkg.version,
   permissions: ['bookmarks', 'storage', 'alarms'],
+  // 열린 창 저장(#3241): 탭 주소를 읽는 권한은 선택 — 처음 저장할 때 팝업이 묻는다. 필수에 넣으면 기존 설치가 업데이트 때 꺼진다.
+  optional_permissions: ['tabs'],
   icons: { 16: 'icons/icon-16.png', 32: 'icons/icon-32.png', 48: 'icons/icon-48.png', 128: 'icons/icon-128.png' },
   action: { default_popup: 'popup.html', default_title: 'Everyfold', default_icon: { 16: 'icons/icon-16.png', 32: 'icons/icon-32.png' } },
 };
@@ -28,7 +30,8 @@ const targets = {
     browser_specific_settings: {
       gecko: {
         id: 'everyfold@xero0429.github.io', strict_min_version: '140.0',
-        data_collection_permissions: { required: ['bookmarksInfo', 'authenticationInfo'] },
+        // 열린 창 저장(#3241)은 탭 주소(방문 페이지 URL)를 북마크로 서버에 보낸다 → 선택 항목 browsingActivity(저장 버튼에서 tabs 와 함께 묻는다)
+        data_collection_permissions: { required: ['bookmarksInfo', 'authenticationInfo'], optional: ['browsingActivity'] },
       },
     },
   },

@@ -7,7 +7,8 @@
  *  · WARN_SERVER_BELOW 확장이 경고하는 서버 API 판(이보다 낮으면 "Server is out of date")
  *  · BLOCK_SERVER_BELOW 확장이 동기화를 멈추는 서버 API 판 — 데이터가 망가질 수 있는 필수 변경일 때만 올린다(지금은 0 = 막지 않음)
  */
-export const API_VERSION = 1;
+/** 2 = 세션 폴더(예약 키 'sessions', SyncOp create.key, ServerNode.key) */
+export const API_VERSION = 2;
 export const MIN_CLIENT_API = 1;
 export const WARN_SERVER_BELOW = 1;
 export const BLOCK_SERVER_BELOW = 0;

@@ -292,3 +292,6 @@ details[open] summary .chev { transform: rotate(90deg); }
   *, *::before, *::after { transition: none !important; animation: none !important; }
   .btn:active:not(:disabled) { transform: none; }
 }
+
+/* 열린 창(세션) */
+.session-note { padding: 6px var(--s3) 10px; border-top: 1px solid var(--border); }

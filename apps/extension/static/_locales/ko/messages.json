@@ -1,6 +1,6 @@
 {
   "extDescription": {
-    "message": "Chrome·Edge·Brave·Firefox 북마크를 하나로 동기화하고 폴더별로 자동 정리합니다 — 내 Cloudflare Worker 에서.",
+    "message": "열린 창을 저장해 다른 브라우저에서 그대로 열고, 북마크를 하나로 동기화·자동 정리합니다 — 내 Cloudflare Worker 에서.",
     "description": "Manifest description = Chrome Web Store summary (max 132 characters)."
   }
 }

@@ -1,6 +1,8 @@
 import browser from 'webextension-polyfill';
 import type { Msg } from './background.js';
-import { compatNotice, friendlyError, hostOf, plural, relTime } from './popup-text.js';
+import { compatNotice, friendlyError, hostOf, plural, relTime, sessionError, sessionText } from './popup-text.js';
+import type { SaveSessionResult, SessionSummary } from './engine.js';
+import { sessionPermissions } from './sessions.js';
 import { POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY, readCachedStatus, readCachedSuggestions, type PopupStatus, type PopupSuggestion } from './popup-cache.js';
 
 /**
@@ -166,7 +168,7 @@ async function refresh() {
   fresh = true;
   refreshError = null;
   show(st);
-  if (st.connected) await loadSuggestions();
+  if (st.connected) await Promise.all([loadSuggestions(), loadSessions()]);
 }
 
 /** 첫 그림: 작은 캐시 키부터 읽어 바로 그린다(SW 깨우기·큰 상태 읽기를 기다리지 않음). 진짜 응답이 먼저 오면 아무것도 안 한다. */
@@ -339,6 +341,112 @@ $('suggestNow').onclick = async () => {
     const r = await send<{ error?: string }>({ type: 'generateSuggestions' });
     if (r?.error) setResult('sugResult', friendlyError(r.error), 'danger');
     else await loadSuggestions('Nothing to clean up right now.');
+  } finally {
+    setBusy(btn, false);
+  }
+};
+
+/* ───────── 열린 창 저장·복구(#3241) ───────── */
+const ST = sessionText(browser.i18n?.getUILanguage?.() ?? navigator.language);
+$('sessionsTitle').textContent = ST.title;
+$('saveSessionLabel').textContent = ST.save;
+$('saveSessionHelp').textContent = ST.saveHelp;
+$('sessionNote').textContent = ST.note;
+
+function renderSessions(list: SessionSummary[] | undefined) {
+  const items = list ?? [];
+  $('sessions').replaceChildren(...items.map((s) => {
+    const li = document.createElement('li');
+    const text = document.createElement('div');
+    text.className = 'sug-text';
+    const title = document.createElement('span');
+    title.className = 'sug-title';
+    title.textContent = s.title;
+    const meta = document.createElement('span');
+    meta.className = 'caption';
+    meta.textContent = ST.meta(s.windows, s.tabs);
+    text.append(title, meta);
+    const actions = document.createElement('div');
+    actions.className = 'sug-actions';
+    const restore = document.createElement('button');
+    restore.type = 'button';
+    restore.className = 'btn primary sm';
+    restore.textContent = ST.restore;
+    restore.setAttribute('aria-label', ST.restoreLabel(s.title));
+    restore.dataset.session = s.id;
+    restore.onclick = async () => {
+      restore.disabled = true;
+      try {
+        const r = await send<{ windows?: number; error?: string }>({ type: 'restoreSession', id: s.id });
+        if (r?.error) setResult('sessionResult', sessionError(r.error, ST), 'danger');
+        else setResult('sessionResult', ST.restored(r?.windows ?? 0), 'ok');
+      } finally {
+        restore.disabled = false;
+      }
+    };
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn ghost sm';
+    del.textContent = ST.del;
+    del.setAttribute('aria-label', ST.delLabel(s.title));
+    // 두 번 눌러 지운다(첫 클릭 = 확인 상태, 4초 뒤 풀림)
+    let armed: ReturnType<typeof setTimeout> | undefined;
+    del.onclick = async () => {
+      if (!armed) {
+        del.textContent = ST.delConfirm;
+        del.className = 'btn danger sm';
+        armed = setTimeout(() => {
+          armed = undefined;
+          del.textContent = ST.del;
+          del.className = 'btn ghost sm';
+        }, 4000);
+        return;
+      }
+      clearTimeout(armed);
+      del.disabled = restore.disabled = true;
+      const r = await send<{ sessions?: SessionSummary[]; error?: string }>({ type: 'deleteSession', id: s.id });
+      if (r?.error) {
+        setResult('sessionResult', sessionError(r.error, ST), 'danger');
+        await loadSessions();
+      } else {
+        setResult('sessionResult', ST.deleted, 'ok');
+        renderSessions(r.sessions);
+      }
+    };
+    actions.append(restore, del);
+    li.append(text, actions);
+    return li;
+  }));
+  $('sessionBox').hidden = !items.length;
+}
+
+async function loadSessions() {
+  const r = await send<{ sessions?: SessionSummary[]; error?: string }>({ type: 'sessions' }).catch(() => ({ sessions: [] as SessionSummary[] }));
+  renderSessions(r?.sessions);
+}
+
+$('saveSession').onclick = async () => {
+  const btn = $('saveSession');
+  // 선택 권한은 사용자 동작(클릭) 안에서 바로 물어야 한다 — 이 앞에 다른 await 를 두지 않는다
+  let granted = false;
+  try {
+    granted = await browser.permissions.request(sessionPermissions(location.protocol === 'moz-extension:'));
+  } catch {
+    // data_collection 을 모르는 Firefox 판 → tabs 만
+    granted = await browser.permissions.request(sessionPermissions(false)).catch(() => false);
+  }
+  if (!granted) {
+    setResult('sessionResult', ST.errors.tabs_permission, 'danger');
+    return;
+  }
+  setBusy(btn, true);
+  setResult('sessionResult', ST.saving);
+  try {
+    const r = await send<(SaveSessionResult | { error: string }) & { sessions?: SessionSummary[]; status?: Status }>({ type: 'saveSession' });
+    if (r?.status) show(r.status);
+    if ('error' in r && r.error) setResult('sessionResult', sessionError(r.error, ST), 'danger');
+    else setResult('sessionResult', ST.saved(r as SaveSessionResult), (r as SaveSessionResult).synced ? 'ok' : '');
+    if (r?.sessions) renderSessions(r.sessions);
   } finally {
     setBusy(btn, false);
   }

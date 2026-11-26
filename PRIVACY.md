@@ -1,6 +1,6 @@
 # Everyfold privacy policy
 
-_Last updated: 2026-11-25_
+_Last updated: 2026-11-26_
 
 Everyfold is a browser extension plus a server that **you deploy to your own Cloudflare account**. There is no Everyfold company service in between: the developer of Everyfold does not run a server for you, has no account system, and receives none of your data.
 
@@ -9,13 +9,14 @@ Everyfold is a browser extension plus a server that **you deploy to your own Clo
 | Data | Why | Where it goes |
 |---|---|---|
 | Your browser bookmarks (titles, URLs, folder structure) | To sync them between your browsers and sort them into categories | Only to **the server URL you enter** in the extension (your own Cloudflare Worker) |
+| Addresses (URLs) and titles of your open tabs — **only when you click *Save open windows*** | To save your windows as a bookmark folder you can reopen in another browser | Saved as ordinary bookmarks (`Everyfold/Sessions/…`), so they go only to **your own server**, like other bookmarks. Nothing is read in the background; private windows are skipped |
 | Server URL, device name, device token | To talk to your server | Stored locally in the extension (`storage.local`) |
 | Admin token | Used once to register the browser | Sent to your server once; **not stored** |
 | Sync state (last revision, mapping between browser and server ids, settings) | To sync incrementally | Stored locally in the extension |
 
-The extension does **not** collect analytics or telemetry, does not use cookies or ads, does not read the pages you visit or your browsing history, and does not send anything to the developer or to any third party.
+The extension does **not** collect analytics or telemetry, does not use cookies or ads, does not read the pages you visit or your browsing history, does not look at your tabs except at the moment you click *Save open windows* (this needs the optional `tabs` permission, asked for the first time you use it), and does not send anything to the developer or to any third party.
 
-In the Chrome Web Store data-use form, bookmark titles and URLs are declared under *Web history*, the closest listed category (there is no "bookmarks" category). The extension still does not read your browsing history.
+In the Chrome Web Store data-use form, bookmark titles and URLs are declared under *Web history*, the closest listed category (there is no "bookmarks" category). The extension still does not read your browsing history. Saved open windows are bookmarks too and are covered by the same declaration; in Firefox the optional `browsingActivity` data-collection permission is requested together with `tabs` for the same feature.
 
 ## What your server stores
 
@@ -27,7 +28,7 @@ If — and only if — **you** set an `ANTHROPIC_API_KEY` on your server, the se
 
 ## Limited use
 
-The use of information received from browser APIs adheres to the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), including the Limited Use requirements: bookmark data is used only to provide the bookmark sync and organizing feature, is transferred only to the server the user configured, and is never sold or used for advertising.
+The use of information received from browser APIs adheres to the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), including the Limited Use requirements: bookmark data (including open windows you choose to save as bookmarks) is used only to provide the bookmark sync and organizing feature, is transferred only to the server the user configured, and is never sold or used for advertising.
 
 ## Contact
 

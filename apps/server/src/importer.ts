@@ -2,6 +2,7 @@ import { clampTitle, flattenBookmarks, groupDuplicates, isImportableUrl, MAX_URL
 import { Store, type NodeState } from './store.js';
 import { addNewCategorySuggestion, classifyWithContext } from './categorize.js';
 import type { Env } from './env.js';
+import { sessionFolderIds } from './sessions.js';
 
 export interface ImportItem {
   url: string;
@@ -54,8 +55,12 @@ export async function importItems(
   const groups = groupDuplicates(items.map((i) => ({ ...i, title: i.title ?? '' })));
   const mergedInFile = groups.reduce((n, g) => n + g.duplicates.length, 0);
 
+  // 세션 폴더 안 북마크(저장한 탭)는 라이브러리 북마크가 아니다 — 같은 주소를 가져와도 "이미 있음" 으로 보지 않는다
+  const sessionIds = sessionFolderIds(await store.liveFolders());
   const existing = new Set(
-    (await store.db.prepare(`SELECT norm_url FROM nodes WHERE kind='bookmark' AND deleted=0`).all<{ norm_url: string }>()).results.map((r) => r.norm_url),
+    (await store.db.prepare(`SELECT norm_url, parent_id FROM nodes WHERE kind='bookmark' AND deleted=0`).all<{ norm_url: string; parent_id: string | null }>()).results
+      .filter((r) => !(r.parent_id && sessionIds.has(r.parent_id)))
+      .map((r) => r.norm_url),
   );
   const fresh = groups.filter((g) => !existing.has(g.key));
   const mergedExisting = groups.length - fresh.length;

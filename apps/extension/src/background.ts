@@ -1,5 +1,6 @@
 import browser from 'webextension-polyfill';
 import { SyncEngine, HttpError, MAX_APPLY_ATTEMPTS, type BNode, type BookmarksApi, type EngineState, type KV, type SyncReport } from './engine.js';
+import { restoreSession, saveOpenWindows, sessionPermissions, type SessionDeps } from './sessions.js';
 import { POPUP_STATUS_KEY, POPUP_SUGGESTIONS_KEY, toCachedStatus, toCachedSuggestions, type PopupStatus, type PopupSuggestion } from './popup-cache.js';
 
 /**
@@ -34,6 +35,18 @@ const bm: BookmarksApi = {
 };
 
 const engine = new SyncEngine(bm, kv, (input, init) => fetch(input, init));
+const sessionDeps: SessionDeps = {
+  hasTabsPermission: async () => {
+    const firefox = browser.runtime.getURL('').startsWith('moz-extension:');
+    // data_collection 을 모르는 Firefox 판이면 tabs 만 본다
+    return browser.permissions.contains(sessionPermissions(firefox)).catch(() => browser.permissions.contains(sessionPermissions(false)));
+  },
+  windows: {
+    getAll: (q) => browser.windows.getAll(q) as unknown as ReturnType<SessionDeps['windows']['getAll']>,
+    create: (d) => browser.windows.create(d),
+  },
+  uiLanguage: () => browser.i18n.getUILanguage(),
+};
 const ready = engine.load();
 
 async function badge(report?: SyncReport) {
@@ -99,7 +112,11 @@ export type Msg =
   | { type: 'setMoveCaptures'; on: boolean }
   | { type: 'dismissMoveHint' }
   | { type: 'importFile'; text: string }
-  | { type: 'decide'; id: string; approve: boolean };
+  | { type: 'decide'; id: string; approve: boolean }
+  | { type: 'sessions' }
+  | { type: 'saveSession' }
+  | { type: 'restoreSession'; id: string }
+  | { type: 'deleteSession'; id: string };
 
 function status(): PopupStatus {
   const s = engine.state;
@@ -160,6 +177,19 @@ async function handle(m: Msg): Promise<unknown> {
       case 'dismissMoveHint':
         await engine.dismissMoveHint();
         return status();
+      case 'sessions':
+        return { sessions: await engine.listSessions() };
+      case 'saveSession': {
+        const r = await saveOpenWindows(engine, sessionDeps);
+        await badge();
+        return { ...r, sessions: await engine.listSessions(), status: status() };
+      }
+      case 'restoreSession':
+        return await restoreSession(engine, sessionDeps, m.id);
+      case 'deleteSession': {
+        const r = await engine.deleteSession(m.id);
+        return { ...r, sessions: await engine.listSessions() };
+      }
       case 'decide': {
         const r = await engine.api('POST', `/suggestions/${encodeURIComponent(m.id)}/${m.approve ? 'approve' : 'reject'}`);
         await runSync();

@@ -3,6 +3,7 @@ import { AnthropicCategorizer } from '@everyfold/core/anthropic';
 import { Store, SYSTEM_DEVICE, type NodeRow } from './store.js';
 import type { Env } from './env.js';
 import { seedLocale, serverLocale, t } from './locale.js';
+import { sessionFolderIds } from './sessions.js';
 
 /** 키가 있을 때만 LLM 공급자를 만든다. 테스트는 setLlmOverride 로 가짜를 꽂는다. */
 let llmOverride: LlmCategorizer | null | undefined;
@@ -35,17 +36,20 @@ export async function ensureSeeded(store: Store, env: Env, acceptLanguage?: stri
 }
 
 export async function categoryContext(store: Store) {
-  const folders = await store.liveFolders();
+  // 세션 폴더와 그 아래는 카테고리가 아니다 — 분류·학습·정리 제안·가져오기 폴더 합치기 어디에도 내놓지 않는다
+  const all = await store.liveFolders();
+  const sessionIds = sessionFolderIds(all);
+  const folders = all.filter((f) => !sessionIds.has(f.id));
   const categories = folders.map((f) => ({ id: f.id, name: f.title, key: f.cat_key ?? null }));
   const moves = (await store.db.prepare(`SELECT url, to_category_id, at FROM moves ORDER BY id DESC LIMIT 5000`).all<{ url: string; to_category_id: string; at: number }>()).results;
   const live = new Set(categories.map((c) => c.id));
   const learned = learnRules(moves.filter((m) => live.has(m.to_category_id)).map((m) => ({ url: m.url, toCategoryId: m.to_category_id, at: m.at })));
   // 인박스도 키로 찾는다 — 사용자가 이름을 바꿔도 그대로
   const inbox = folders.find((f) => f.cat_key === INBOX_KEY) ?? null;
-  return { folders, categories, learned, inboxId: inbox?.id ?? null };
+  return { folders, categories, learned, inboxId: inbox?.id ?? null, sessionIds };
 }
 
-export async function classifyWithContext(store: Store, env: Env, items: ClassifyItem[]): Promise<{ results: Classification[]; inboxId: string | null; folders: NodeRow[]; llmUsed: boolean; llmError?: string }> {
+export async function classifyWithContext(store: Store, env: Env, items: ClassifyItem[]): Promise<{ results: Classification[]; inboxId: string | null; folders: NodeRow[]; sessionIds: Set<string>; llmUsed: boolean; llmError?: string }> {
   const ctx = await categoryContext(store);
   const llm = llmFor(env, await serverLocale(store, env));
   let llmError: string | undefined;
@@ -57,7 +61,7 @@ export async function classifyWithContext(store: Store, env: Env, items: Classif
       llmError = e instanceof Error ? e.message : String(e);
     },
   });
-  return { results, inboxId: ctx.inboxId, folders: ctx.folders, llmUsed: !!llm, ...(llmError ? { llmError } : {}) };
+  return { results, inboxId: ctx.inboxId, folders: ctx.folders, sessionIds: ctx.sessionIds, llmUsed: !!llm, ...(llmError ? { llmError } : {}) };
 }
 
 /** 북마크 하나를 분류해 넣을 폴더 id 를 돌려준다(못 정하면 미분류, 미분류도 없으면 루트). */

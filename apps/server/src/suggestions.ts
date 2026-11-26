@@ -3,6 +3,7 @@ import type { Env } from './env.js';
 import { serverLocale, t } from './locale.js';
 import { rowToState, Store, type NodeState } from './store.js';
 import { categoryContext } from './categorize.js';
+import { sessionFolderIds } from './sessions.js';
 
 /**
  * 제안 = 승인해야 적용되는 동작 목록. 승인 시 한 batch 로 적용되므로 /changes/undo 로 되돌릴 수 있다.
@@ -93,6 +94,8 @@ export async function decideSuggestion(store: Store, id: string, approve: boolea
   const refs = new Map<string, string>();
   let applied = 0;
   let skipped = 0;
+  // 세션 폴더와 그 아래는 승인된 제안이라도 옮기거나 지우지 않는다(제안을 만든 뒤 사용자가 그 안으로 옮긴 경우까지)
+  const sessionIds = sessionFolderIds(await store.liveFolders());
   for (const a of actionsOf(s.kind, JSON.parse(s.payload_json))) {
     if (a.type === 'create_folder') {
       const existing = await store.findLiveFolder(a.parentId, a.name);
@@ -108,7 +111,7 @@ export async function decideSuggestion(store: Store, id: string, approve: boolea
     }
     const targetId = a.type === 'move' ? a.nodeId : a.id;
     const row = await store.get(targetId);
-    if (!row || row.deleted) {
+    if (!row || row.deleted || sessionIds.has(row.id) || (row.parent_id && sessionIds.has(row.parent_id))) {
       skipped++;
       continue;
     }
@@ -117,7 +120,7 @@ export async function decideSuggestion(store: Store, id: string, approve: boolea
     if (a.type === 'move') {
       const to = refs.get(a.to) ?? a.to;
       const dest = await store.get(to);
-      if (!dest || dest.deleted || dest.kind !== 'folder') {
+      if (!dest || dest.deleted || dest.kind !== 'folder' || sessionIds.has(dest.id)) {
         skipped++;
         continue;
       }

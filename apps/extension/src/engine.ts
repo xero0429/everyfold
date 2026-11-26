@@ -1,6 +1,7 @@
 import {
-  BRAND, checkCompat, DEFAULT_COMPAT_POLICY, isMassDelete, normalizeUrl, type Compat, type CompatPolicy, type MassDeleteError, type NodeRef, type PullResponse,
-  type PushResponse, type ServerNode, type ServerVersionInfo, type SyncOp,
+  BRAND, checkCompat, DEFAULT_COMPAT_POLICY, isMassDelete, isSessionUrl, normalizeUrl, SESSIONS_KEY, SESSIONS_MIN_SERVER_API, sessionTitle, sessionWindowName,
+  type Compat, type CompatPolicy, type Locale, type MassDeleteError, type NodeRef, type PullResponse, type PushResponse, type ServerNode, type ServerVersionInfo,
+  type SessionPlan, type SyncOp,
 } from '@everyfold/core';
 
 /**
@@ -49,6 +50,8 @@ export interface ShadowEntry {
   rev: number;
   /** Move 모드 capture: 원본이 아직 루트 밖에 있다(다음 pull 이 카테고리 폴더로 옮긴다) — diff 가 삭제로 보지 않게 */
   pendingMove?: boolean;
+  /** 서버가 정한 폴더 키(ServerNode.key) — 'sessions' = 세션 폴더 */
+  key?: string;
 }
 
 export interface EngineState {
@@ -116,6 +119,25 @@ export const PUSH_TIMEOUT_MS = 2 * 60_000;
 export const REQUEST_TIMEOUT = 'request_timeout';
 /** 첫 업로드가 시간 초과된 뒤 importRetryAt 전에 sync 하면 이 오류로 멈춘다(/import 를 다시 보내지 않음) */
 export const IMPORT_PENDING = 'import_pending';
+/** 열린 창 저장 오류 코드(팝업이 문구로 바꾼다) */
+export const SESSIONS_SERVER_OUTDATED = 'sessions_server_outdated';
+export const SESSION_EMPTY = 'session_empty';
+export const SESSION_NOT_FOUND = 'session_not_found';
+
+/** 저장한 세션 하나(팝업 목록) */
+export interface SessionSummary {
+  /** 이 브라우저의 세션 폴더 id */
+  id: string;
+  title: string;
+  windows: number;
+  tabs: number;
+}
+export interface SaveSessionResult extends SessionSummary {
+  skipped: number;
+  /** 서버까지 올렸는지(false = 이 브라우저에만 저장됨, 다음 동기화에 올라간다) */
+  synced: boolean;
+  syncError?: string;
+}
 
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -245,7 +267,12 @@ export class SyncEngine {
 
   /** 동시에 두 번 돌지 않게 줄 세운다 */
   sync(opts: { confirmMassDelete?: boolean } = {}): Promise<SyncReport> {
-    const run = this.running.then(() => this.syncOnce(opts));
+    return this.enqueue(() => this.syncOnce(opts));
+  }
+
+  /** sync·세션 저장/지우기를 한 줄에 세운다(북마크 트리를 동시에 고치지 않게) */
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.running.then(fn);
     this.running = run.catch(() => undefined);
     return run;
   }
@@ -685,7 +712,7 @@ export class SyncEngine {
         this.state.pendingMappings.push({ browserId: bid, serverId: n.id });
         if ((adopted.title ?? '') !== n.title) await this.bm.update(bid, { title: n.title });
         this.state.map[bid] = n.id;
-        this.state.shadow[n.id] = { b: bid, kind: n.kind, parent: n.parentId, title: n.title, url: n.url, rev: n.rev };
+        this.state.shadow[n.id] = { b: bid, kind: n.kind, parent: n.parentId, title: n.title, url: n.url, rev: n.rev, ...(n.key ? { key: n.key } : {}) };
         return 'changed';
       }
       const created = await this.bm.create({ parentId: parentB, title: n.title, ...(n.kind === 'bookmark' && n.url ? { url: n.url } : {}) });
@@ -696,7 +723,8 @@ export class SyncEngine {
     }
     if (e && e.b && e.b !== bid) delete this.state.map[e.b];
     this.state.map[bid] = n.id;
-    this.state.shadow[n.id] = { b: bid, kind: n.kind, parent: n.parentId, title: n.title, url: n.url, rev: n.rev };
+    const key = n.key ?? e?.key;
+    this.state.shadow[n.id] = { b: bid, kind: n.kind, parent: n.parentId, title: n.title, url: n.url, rev: n.rev, ...(key ? { key } : {}) };
     return changed ? 'changed' : 'same';
   }
 
@@ -726,6 +754,148 @@ export class SyncEngine {
     await this.save();
   }
 
+  /* ───────── 열린 창 저장(세션) ───────── */
+  /** /categories 로 세션 폴더 키를 한 번만 되찾는다(옛 확장이 키 없이 받아 둔 경우) */
+  private sessionsLookedUp = false;
+
+  /** 이 브라우저의 세션 폴더(서버 키 'sessions') — 루트 바로 아래, 브라우저에 실제로 있는 것만 */
+  async findSessionsFolder(): Promise<{ sid: string; b: string } | null> {
+    for (const [sid, e] of Object.entries(this.state.shadow)) {
+      if (e.key !== SESSIONS_KEY || e.parent !== null || !e.b) continue;
+      const b = await this.exists(e.b);
+      if (b && !b.url) return { sid, b: b.id };
+    }
+    if (this.sessionsLookedUp || !this.connected || (this.state.server?.api ?? 0) < SESSIONS_MIN_SERVER_API) return null;
+    this.sessionsLookedUp = true;
+    try {
+      const r = await this.api<{ categories?: Array<{ id: string; key?: string | null; parentId?: string | null }> }>('GET', '/categories');
+      const hit = (r?.categories ?? []).find((c) => c.key === SESSIONS_KEY && !c.parentId);
+      const e = hit ? this.state.shadow[hit.id] : undefined;
+      if (!hit || !e) return null;
+      e.key = SESSIONS_KEY;
+      await this.save();
+      return this.findSessionsFolder();
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 열린 창을 세션 폴더 아래 북마크 폴더로 저장한다: <제목>/<창 n>/<탭…>. 저장 = 북마크 만들기 → 보통 동기화로 서버·다른 브라우저에 간다.
+   * 세션 폴더가 없으면 서버에 키로 만들게 하고(이름은 서버 로캘) 받아 온다. 서버에 못 닿아도 세션 폴더가 이미 있으면 이 브라우저에 저장해 두고
+   * 다음 동기화에 올린다.
+   */
+  saveSession(plan: SessionPlan, opts: { locale: Locale; at?: Date }): Promise<SaveSessionResult> {
+    return this.enqueue(async () => {
+      if (!this.connected) throw new Error('not connected');
+      if (!plan.windows.length) throw new Error(SESSION_EMPTY);
+      const srv = await this.checkServer();
+      if ((srv?.api ?? 0) < SESSIONS_MIN_SERVER_API) throw new Error(SESSIONS_SERVER_OUTDATED);
+      let syncError: string | undefined;
+      // 먼저 한 번 맞춘다(로컬 변경을 올린 뒤 받는다 — pull 이 아직 안 올린 로컬 수정을 덮지 않게)
+      try {
+        await this.syncOnce({});
+      } catch (e) {
+        syncError = e instanceof Error ? e.message : String(e);
+      }
+      let folder = await this.findSessionsFolder();
+      if (!folder) {
+        if (syncError) throw new Error(syncError);
+        const r = await this.api<PushResponse>('POST', '/sync/push', {
+          ops: [{ op: 'create', clientRef: 'api:sessions', kind: 'folder', parent: null, title: '', key: SESSIONS_KEY } satisfies SyncOp],
+        });
+        const res = r.results[0];
+        if (!res?.serverId || (res.status !== 'applied' && res.status !== 'merged')) throw new Error(`sessions folder: ${res?.reason ?? res?.status ?? 'no result'}`);
+        if (res.node) this.mergedNodes.push(res.node);
+        await this.syncOnce({});
+        const e = this.state.shadow[res.serverId];
+        if (e && !e.key) e.key = SESSIONS_KEY;
+        folder = await this.findSessionsFolder();
+        if (!folder) throw new Error('sessions folder missing after sync');
+      }
+
+      const [sf] = await this.bm.getSubTree(folder.b);
+      const taken = new Set((sf?.children ?? []).map((c) => c.title));
+      const base = sessionTitle(opts.at ?? new Date(this.now()), this.state.deviceName);
+      let title = base;
+      for (let i = 2; taken.has(title); i++) title = `${base} (${i})`; // 같은 분에 두 번 저장 → 서버의 같은 이름 폴더 합치기를 피한다
+
+      this.applying = true;
+      let session: BNode;
+      try {
+        session = await this.bm.create({ parentId: folder.b, title });
+        for (let w = 0; w < plan.windows.length; w++) {
+          const win = await this.bm.create({ parentId: session.id, title: sessionWindowName(opts.locale, w + 1) });
+          for (const tab of plan.windows[w]!) await this.bm.create({ parentId: win.id, title: tab.title, url: tab.url });
+        }
+      } finally {
+        this.applying = false;
+      }
+      const out: SaveSessionResult = { id: session.id, title, windows: plan.windows.length, tabs: plan.tabs, skipped: plan.skipped, synced: false };
+      if (syncError) return { ...out, syncError };
+      try {
+        await this.syncOnce({});
+        out.synced = !!this.state.map[session.id];
+      } catch (e) {
+        out.syncError = e instanceof Error ? e.message : String(e);
+      }
+      return out;
+    });
+  }
+
+  /** 저장한 세션 목록(새것 먼저) — 세션 폴더 바로 아래 폴더 하나 = 세션 하나 */
+  async listSessions(): Promise<SessionSummary[]> {
+    const f = await this.findSessionsFolder();
+    if (!f) return [];
+    const [n] = await this.bm.getSubTree(f.b).catch(() => [] as BNode[]);
+    return (n?.children ?? [])
+      .filter((c) => !c.url)
+      .map((c) => {
+        const wins = windowsOf(c);
+        return { id: c.id, title: c.title, windows: wins.length, tabs: wins.reduce((k, w) => k + w.length, 0) };
+      })
+      .reverse();
+  }
+
+  /** 세션 하나를 창별 주소 목록으로(복구용). 열 수 없는 주소·빈 창은 뺀다 */
+  async sessionWindows(id: string): Promise<string[][]> {
+    const f = await this.findSessionsFolder();
+    const [n] = await this.bm.getSubTree(id).catch(() => [] as BNode[]);
+    if (!f || !n || n.url || n.parentId !== f.b) throw new Error(SESSION_NOT_FOUND);
+    return windowsOf(n);
+  }
+
+  /** 세션 하나를 지운다 — 사용자가 고른 한 폴더만이라 대량 삭제 확인을 묻지 않는다(그 op 하나에만 confirm) */
+  deleteSession(id: string): Promise<{ deleted: boolean }> {
+    return this.enqueue(async () => {
+      const f = await this.findSessionsFolder();
+      const [n] = await this.bm.get(id).catch(() => [] as BNode[]);
+      if (!f || !n || n.url || n.parentId !== f.b) throw new Error(SESSION_NOT_FOUND);
+      const sid = this.state.map[id];
+      const e = sid ? this.state.shadow[sid] : undefined;
+      if (sid && e && e.rev !== -1) {
+        const res = await this.pushOps([{ op: 'delete', id: sid, baseRev: e.rev }], true);
+        const r = 'results' in res ? res.results[0] : undefined;
+        if (r?.status === 'conflict') throw new Error('session changed on another device; try again after it syncs');
+        if (r?.status === 'rejected') throw new Error(r.reason ?? 'rejected');
+      }
+      const [tree] = await this.bm.getSubTree(id).catch(() => [] as BNode[]);
+      const walk = (x: BNode) => {
+        delete this.state.map[x.id];
+        (x.children ?? []).forEach(walk);
+      };
+      if (tree) walk(tree);
+      this.applying = true;
+      try {
+        await this.bm.removeTree(id);
+      } finally {
+        this.applying = false;
+      }
+      await this.save();
+      return { deleted: true };
+    });
+  }
+
   /** 대량 삭제 보류를 "되돌리기" 로 처리: 지운 것을 서버 상태대로 브라우저에 다시 만든다 */
   async restorePendingDeletes() {
     const p = this.state.pendingMassDelete;
@@ -740,6 +910,14 @@ export class SyncEngine {
     for (const [id, e] of Object.entries(this.state.shadow)) if (e.parent === sid) this.markForRestoreTree(id);
     this.markForRestore(sid);
   }
+}
+
+/** 세션 폴더 → 창별 주소. 하위 폴더 = 창, 세션 바로 아래 북마크(사용자가 넣은 것)는 한 창으로 묶는다 */
+function windowsOf(session: BNode): string[][] {
+  const urls = (n: BNode) => (n.children ?? []).flatMap((c) => (c.url && isSessionUrl(c.url) ? [c.url] : []));
+  const out = (session.children ?? []).filter((c) => !c.url).map(urls);
+  out.push(urls(session));
+  return out.filter((w) => w.length);
 }
 
 function safeNorm(url: string): string | null {

@@ -5,7 +5,7 @@
 <h1 align="center">Everyfold</h1>
 
 <p align="center">
-  <b>Self-hosted bookmark sync for Chrome, Edge, Brave and Firefox — one library in every browser, auto-organized into folders, on your own free Cloudflare Worker.</b>
+  <b>Save your open windows and reopen them in any browser — plus self-hosted bookmark sync for Chrome, Edge, Brave and Firefox: one library in every browser, auto-organized into folders, on your own free Cloudflare Worker.</b>
 </p>
 
 <p align="center">
@@ -32,6 +32,7 @@ There is no Everyfold account and no Everyfold-run server: **you deploy the serv
 
 ## Features
 
+- 🪟 **Reopen your windows anywhere.** *Save open windows* in the popup stores every window's tabs as a bookmark folder (`Everyfold/Sessions/<date · device>/Window 1, 2…`); it syncs like any bookmark, so you can restore it later in another browser or on another computer — one new window per saved window. Only page addresses are restored (not tab history, pinned tabs or tab groups); addresses that can't be bookmarked (`chrome://`, `about:`, `file:`, extension pages) and private windows are skipped. The `tabs` permission is optional and asked for only when you first save; restoring works without it. Needs server 0.1.3 or later. Saved windows are never auto-sorted or touched by cleanup suggestions.
 - 🔖 **Real browser bookmarks.** No new app to open: the `Everyfold` folder lives in each browser's own bookmarks (Chrome: *Other bookmarks*, Firefox: *Other Bookmarks*).
 - 🔄 **Syncs across browsers.** Chrome, Edge, Brave and Firefox (preview) share one library; changes sync when you make them, every 5 minutes, and when a window regains focus.
 - 🗂️ **Auto-categorized.** Rules → learned from your moves → optional Claude Haiku. An LLM can only *suggest* a new category; nothing new appears until you approve it.
@@ -144,6 +145,7 @@ That's it. Bookmarks sync when you change them, every 5 minutes, and when a brow
 **Settings (per browser, in the popup)**
 
 - *Move new bookmarks into Everyfold* — off by default. When off, a bookmark you create outside the `Everyfold` folder is **copied** into its category folder and the original stays (so you see it twice). When on, the bookmark itself is **moved** into its category folder, leaving one copy. If you later undo that change on the server, the bookmark goes back to where you created it instead of being deleted. After the first connect the popup shows a one-time hint about this setting; nothing is moved until you turn it on.
+- *Save open windows* — saves the tabs of all your (non-private) windows as one saved set; the list under it has *Restore* (opens a window per saved window) and *Delete* (removes the set in every browser). The first save asks for the `tabs` permission; if you decline, nothing else changes.
 - *Suggest cleanup* — asks the server for cleanup suggestions (sort unsorted bookmarks by rules, remove empty categories, new categories proposed by the LLM). Each suggestion is applied only when you click *Apply*.
 
 **Language.** Default category names, server messages and LLM-proposed names come in English or Korean. Set the `LOCALE` variable (`en` or `ko`) on the Worker to choose; without it, the language of the first browser that connects is used (English if it is neither).
@@ -283,6 +285,7 @@ Yes; see the *Chrome account sync* note under [Install the extension](#2-install
 ## Known limitations
 
 - Sibling order inside folders is not synced yet (new items are appended).
+- *Save open windows* restores page addresses only — not tab history, pinned tabs, tab groups or window positions. Window folder names (`Window 1`) follow the browser's language; the `Sessions` folder name follows the server's category language.
 - Default category names exist in English and Korean only (see *Language*). Rename them as you like — renames sync, and categorizing keeps using the renamed folder.
 - Safari is not supported. Firefox is not on Firefox Add-ons (AMO) yet: it is installed from the release zip as a temporary add-on, and updating it is manual (see *Install the extension*).
 - After the first connect, each browser has both its original bookmarks and the `Everyfold` copy, by design. New bookmarks can be moved instead of copied with the *Move* setting.

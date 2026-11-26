@@ -106,7 +106,7 @@ api.post('/import', async (c) => {
 
 api.get('/categories', async (c) => {
   const r = await c.env.DB.prepare(
-    `SELECT f.id, f.title AS name, f.parent_id AS parentId, f.position,
+    `SELECT f.id, f.title AS name, f.parent_id AS parentId, f.position, f.cat_key AS key,
             (SELECT COUNT(*) FROM nodes b WHERE b.parent_id=f.id AND b.deleted=0 AND b.kind='bookmark') AS bookmarks
        FROM nodes f WHERE f.kind='folder' AND f.deleted=0 ORDER BY f.parent_id, f.position`,
   ).all();

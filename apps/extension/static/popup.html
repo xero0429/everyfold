@@ -30,6 +30,9 @@
   <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 15V3" /><path d="M7 8l5-5 5 5" /><path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
   </symbol>
+  <symbol id="i-windows" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="7" y="3" width="14" height="12" rx="2" /><path d="M7 7h14" /><path d="M17 19H5a2 2 0 0 1-2-2V9" />
+  </symbol>
   <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z" />
   </symbol>
@@ -175,6 +178,23 @@
           <button id="moveHintOn" class="btn primary sm" type="button">Turn on</button>
           <button id="moveHintLater" class="btn ghost sm" type="button">Not now</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 열린 창 저장·복구(#3241) — 문구는 popup.ts 가 UI 언어(en/ko)로 채운다 -->
+    <div id="sessionsCard" class="rows card flush" role="group" aria-labelledby="sessionsTitle">
+      <h2 id="sessionsTitle" class="sr-only">Open windows</h2>
+      <button id="saveSession" class="row" type="button" aria-describedby="saveSessionHelp sessionResult">
+        <span class="row-ic"><svg class="ic idle-ic" aria-hidden="true"><use href="#i-windows" /></svg><svg class="ic spin" aria-hidden="true"><use href="#i-spinner" /></svg></span>
+        <span class="row-text">
+          <span id="saveSessionLabel" class="row-title">Save open windows</span>
+          <span id="saveSessionHelp" class="caption">Saves every window’s tabs as a bookmark folder. Reopen them in any connected browser.</span>
+        </span>
+      </button>
+      <p id="sessionResult" class="result" role="status"></p>
+      <div id="sessionBox" hidden>
+        <ul id="sessions" class="sug-list"></ul>
+        <p id="sessionNote" class="caption session-note">Restores page addresses only — not tab history.</p>
       </div>
     </div>
 

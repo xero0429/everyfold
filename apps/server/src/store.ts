@@ -33,7 +33,7 @@ export function rowToState(r: NodeRow): NodeState {
 }
 
 export function rowToNode(r: NodeRow): ServerNode {
-  return { ...rowToState(r), rev: r.rev, updatedAt: r.updated_at };
+  return { ...rowToState(r), rev: r.rev, updatedAt: r.updated_at, ...(r.cat_key ? { key: r.cat_key } : {}) };
 }
 
 export const SYSTEM_DEVICE = 'system';

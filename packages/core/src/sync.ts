@@ -21,6 +21,8 @@ export interface ServerNode {
   deleted: boolean;
   rev: number;
   updatedAt: number;
+  /** 서버가 정한 폴더 안정 키(기본 카테고리 키·세션 폴더 'sessions'). 사용자 폴더·북마크엔 없다. API 2 부터 */
+  key?: string;
 }
 
 /** op 가 가리키는 부모: 이미 서버에 있는 노드거나, 같은 batch 안에서 먼저 만든 노드(clientRef). */
@@ -37,6 +39,8 @@ export type SyncOp =
       position?: number;
       /** parent=null 인 북마크를 서버가 분류해 카테고리 폴더에 넣는다(브라우저 다른 곳에서 새로 만든 북마크 수집용) */
       autoCategorize?: boolean;
+      /** 예약 폴더 만들기(API 2): 'sessions' = 세션 폴더. parent=null 폴더만. 이미 있으면 그 폴더로 merged */
+      key?: string;
     }
   | { op: 'update'; id: string; baseRev: number; title?: string; url?: string }
   | { op: 'move'; id: string; baseRev: number; parent: NodeRef | null; position?: number }

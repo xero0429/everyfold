@@ -8,3 +8,4 @@ export * from './classify/classify.js';
 export * from './brand.js';
 export * from './importers.js';
 export * from './version.js';
+export * from './sessions.js';
