@@ -1,6 +1,6 @@
 # Chrome Web Store listing
 
-> 0.1.2 is published (2026-11-26, listing `jkdaehjboglabiaebmpnkgecmkkihgbd`). This file is the text for the next update, **0.1.3** (adds *Save open windows* and the optional `tabs` permission) — not submitted yet. Submitting is done by the owner in the developer dashboard.
+> 0.1.3 submitted 2026-11-26 (in review; 0.1.2 stays published until it passes — auto-publish on pass is on). Listing `jkdaehjboglabiaebmpnkgecmkkihgbd`. This file is the text that was submitted for 0.1.3 (adds *Save open windows* and the optional `tabs` permission); reuse it for the next update. Submitting is done in the developer dashboard.
 
 Package: `pnpm package:chrome` → `apps/extension/dist/store/everyfold-chrome-<version>.zip` (manifest at the zip root, `_locales/en` + `_locales/ko` inside).
 Screenshots: `pnpm --filter @everyfold/extension store-shots` → `apps/extension/dist/store/screenshots/` (1280×800; light set committed in `docs/store/screenshots/`).
@@ -101,16 +101,17 @@ Certify:
 
 ## Test instructions tab
 
-Reviewers need a server to connect to. Before submitting, the owner deploys a throwaway server (own Cloudflare account: *Deploy to Cloudflare* button from the README, Worker name `everyfold-review`, a fresh `ADMIN_TOKEN` from `openssl rand -hex 32`), registers nothing, and puts this in the *Test instructions* tab (if it has separate username/password fields, leave them empty — the URL and token are in the text):
+Reviewers need a server to connect to. Before submitting, the owner deploys a throwaway server (own Cloudflare account, Worker name `everyfold-review` with its own D1 database `everyfold-review`, a fresh `ADMIN_TOKEN` from `openssl rand -hex 32`) and registers nothing. The *Test instructions* tab has three fields: **Username** (≤100), **Password** (≤100) and **Additional instructions** (**≤500 characters** — the token does not fit there together with the steps). Put `admin-token` in Username, the review admin token in Password, and this in Additional instructions (491 characters with the real URL):
 
 ```
 1. Click the toolbar icon. Server URL: https://everyfold-review.<subdomain>.workers.dev
-2. Token type: Admin token. Token: <review admin token>. Device name: review.
-3. Click Connect. An "Everyfold" folder appears under Other bookmarks with categories.
-4. Add any bookmark (Ctrl+D) outside that folder; within a few seconds a copy appears in its category folder.
-5. Open a few web pages, click "Save open windows" in the popup and allow the tabs permission. The set appears in the list below the button (and under Everyfold/Sessions in bookmarks); "Restore" opens the saved windows again.
-The review server will be deleted after review.
+2. Token type: Admin token. Token: see Password. Device name: review.
+3. Click Connect. An "Everyfold" folder appears under Other bookmarks.
+4. Add a bookmark (Ctrl+D) outside it; a copy appears in its category folder.
+5. Open some pages, click "Save open windows", allow tabs permission. The set is listed below the button (and in Everyfold/Sessions); "Restore" reopens it.
+Server is deleted after review.
 ```
+
 Delete that Worker (or rotate `ADMIN_TOKEN`) once the review is done. Keep it for later updates too: every new version is reviewed again.
 
 ## Distribution tab
