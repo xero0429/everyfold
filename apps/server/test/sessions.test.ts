@@ -224,6 +224,71 @@ describe('cleanup suggestions leave the sessions folder alone', () => {
   });
 });
 
+describe('#3242 follow-ups', () => {
+  it('sessions folder moved under a category → create(key: sessions) puts it back at the root (recorded change, every device pulls it) and saving works', async () => {
+    await A.pull();
+    await B.pull();
+    const dev = A.folder('개발').id;
+    const mv = await A.push([{ op: 'move', id: sessionsId, baseRev: A.nodes.get(sessionsId).rev, parent: { serverId: dev } }]);
+    expect(res(mv).status).toBe('applied'); // 옮기기 자체는 막지 않는다
+    await B.pull();
+    expect(B.nodes.get(sessionsId)).toMatchObject({ parentId: dev, key: SESSIONS_KEY });
+    const r = await A.push([sessionsOp('api:sessions-restore')]);
+    expect(res(r)).toMatchObject({ status: 'merged', serverId: sessionsId, node: { id: sessionsId, parentId: null, key: SESSIONS_KEY } });
+    expect(res(r).rev).toBe(res(r).node.rev);
+    const ch = await t.DB.prepare(`SELECT op, before_json, after_json FROM changes WHERE node_id=? ORDER BY rev DESC LIMIT 1`).bind(sessionsId).first<any>();
+    expect(ch.op).toBe('move');
+    expect(JSON.parse(ch.before_json).parentId).toBe(dev);
+    expect(JSON.parse(ch.after_json).parentId).toBeNull();
+    await B.pull();
+    expect(B.nodes.get(sessionsId)).toMatchObject({ parentId: null, key: SESSIONS_KEY, deleted: false });
+    // 이미 루트면 또 쓰지 않는다
+    const again = await B.push([sessionsOp('api:sessions-again')]);
+    expect(res(again)).toMatchObject({ status: 'merged', serverId: sessionsId, rev: res(r).rev });
+    const out = await pushSession(A, '2026-11-27 08:00 · A', [['https://after-restore.example/']]);
+    expect(out.every((x) => x.status === 'applied')).toBe(true);
+    expect(A.nodes.get(out[0].serverId).parentId).toBe(sessionsId);
+  });
+
+  it('import with a path starting with the sessions folder name goes to the inbox — no second root folder of that name', async () => {
+    await A.pull();
+    const current = A.nodes.get(sessionsId).title; // 앞 시험에서 'My windows' 로 바꿨다
+    const items = [
+      { url: 'https://imp-sess.example/ko', title: 'ko', path: ['세션', '2026-11-20 10:00 · X', '창 1'] },
+      { url: 'https://imp-sess.example/en', title: 'en', path: ['Bookmarks bar', 'Sessions', 'Window 1'] },
+      { url: 'https://imp-sess.example/cur', title: 'cur', path: [current] },
+      { url: 'https://imp-sess.example/other', title: 'other', path: ['My stuff'] },
+    ];
+    const r = await t.call('POST', '/import', { token: A.token, body: { items } });
+    expect(r.json).toMatchObject({ created: 4 });
+    await A.pull();
+    const inbox = A.folder('미분류').id;
+    for (const u of ['ko', 'en', 'cur']) expect(A.byUrl(`https://imp-sess.example/${u}`).parentId, u).toBe(inbox);
+    expect(A.nodes.get(A.byUrl('https://imp-sess.example/other').parentId)).toMatchObject({ title: 'My stuff', parentId: null }); // 다른 경로는 그대로 재현
+    const rootFolders = A.live().filter((n) => n.kind === 'folder' && n.parentId === null).map((n) => n.title.toLowerCase());
+    for (const name of ['세션', 'sessions', current.toLowerCase()]) expect(rootFolders.filter((x) => x === name).length, name).toBeLessThanOrEqual(1);
+    expect(A.live().filter((n) => n.kind === 'folder' && n.parentId === null && ['세션', 'Sessions', current].includes(n.title)).map((n) => n.id)).toEqual([sessionsId]);
+  });
+
+  it('moving a bookmark into a session folder writes no moves row (moving elsewhere still does)', async () => {
+    await A.pull();
+    const sessionIds = sessionSubtree();
+    const win = A.live().find((n) => n.kind === 'folder' && sessionIds.has(n.id) && n.parentId !== sessionsId)!;
+    await t.call('POST', '/import', { token: A.token, body: { items: [{ url: 'https://nomove.example/1', title: 'n1' }, { url: 'https://nomove.example/2', title: 'n2' }] } });
+    await A.pull();
+    const n1 = A.byUrl('https://nomove.example/1');
+    const n2 = A.byUrl('https://nomove.example/2');
+    const r = await A.push([
+      { op: 'move', id: n1.id, baseRev: n1.rev, parent: { serverId: win.id } },
+      { op: 'move', id: n2.id, baseRev: n2.rev, parent: { serverId: A.folder('개발').id } },
+    ]);
+    expect(r.json.results.map((x: any) => x.status)).toEqual(['applied', 'applied']);
+    const count = async (url: string) => (await t.DB.prepare(`SELECT COUNT(*) AS n FROM moves WHERE url=?`).bind(url).first<{ n: number }>())!.n;
+    expect(await count('https://nomove.example/1')).toBe(0);
+    expect(await count('https://nomove.example/2')).toBe(1);
+  });
+});
+
 /** A 가 아는 세션 폴더와 그 아래 폴더 id */
 function sessionSubtree(): Set<string> {
   const out = new Set<string>([sessionsId]);
