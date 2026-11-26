@@ -55,7 +55,7 @@ Run it for real:
 - [ ] Screenshots: `docs/store/screenshots/*.png` (1280×800). Icon 128×128: `apps/extension/static/icons/icon-128.png`. Small promo tile 440×280: `docs/store/promo-tile-440x280.png`. Korean listing text: `docs/store/chrome-web-store.md` → *Korean listing (ko)*.
 - [ ] Privacy policy URL: `https://github.com/xero0429/everyfold/blob/main/PRIVACY.md` (needs the public repo).
 - [ ] Deploy a throwaway review server and put its URL + admin token in *Test instructions*; delete it after approval.
-- [ ] After approval: put the store link in README (*Install the extension*) and the popup's "How to update the extension" link.
+- [x] After approval: put the store link in README (*Install the extension*) and the popup's "How to update the extension" link. — published 2026-11-26: https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd (the popup link points at README *Install the extension*, which now leads with the store link).
 
 ## 4. Firefox Add-ons (AMO) **[owner]** — later (③)
 
