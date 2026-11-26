@@ -12,6 +12,7 @@
   <a href="https://github.com/xero0429/everyfold/releases/latest"><img src="https://img.shields.io/github/v/release/xero0429/everyfold?label=release&color=3150d0" alt="최신 릴리스"></a>
   <a href="https://github.com/xero0429/everyfold/actions/workflows/ci.yml"><img src="https://github.com/xero0429/everyfold/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="라이선스: MIT"></a>
+  <a href="https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd"><img src="https://img.shields.io/chrome-web-store/v/jkdaehjboglabiaebmpnkgecmkkihgbd?label=Chrome%20Web%20Store&logo=googlechrome&logoColor=white&color=4285F4" alt="Chrome 웹 스토어"></a>
   <a href="#2-확장-설치"><img src="https://img.shields.io/badge/Chrome%20%C2%B7%20Edge%20%C2%B7%20Brave-MV3-4285F4?logo=googlechrome&logoColor=white" alt="Chrome, Edge, Brave (Manifest V3)"></a>
   <a href="#2-확장-설치"><img src="https://img.shields.io/badge/Firefox-140%2B%20(preview)-FF7139?logo=firefoxbrowser&logoColor=white" alt="Firefox 140 이상 (미리보기)"></a>
   <a href="#1-서버-배포"><img src="https://img.shields.io/badge/Cloudflare%20Workers-free%20plan-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers 무료 플랜에서 동작"></a>
@@ -60,7 +61,7 @@ Everyfold 계정도, Everyfold 가 운영하는 서버도 없습니다. **서버
 ## 빠른 시작
 
 1. **서버 배포** — [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xero0429/everyfold) 를 누르고 `ADMIN_TOKEN`(`openssl rand -hex 32`)을 넣습니다. `https://everyfold.<내-서브도메인>.workers.dev` 가 생깁니다. → [자세히](#1-서버-배포)
-2. **확장 설치** — [최신 릴리스](https://github.com/xero0429/everyfold/releases/latest)에서 Chrome 또는 Firefox zip 을 받아 개발자 모드로 올립니다(Chrome 웹 스토어·Firefox 부가 기능 등록은 아직). → [자세히](#2-확장-설치)
+2. **확장 설치** — Chrome·Edge·Brave 는 [Chrome 웹 스토어](https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd)에서 설치합니다. Firefox 는 [최신 릴리스](https://github.com/xero0429/everyfold/releases/latest)의 zip 을 임시 부가 기능으로 올립니다(Firefox 부가 기능 등록은 아직). → [자세히](#2-확장-설치)
 3. **브라우저마다 연결** — Everyfold 아이콘 → 서버 URL·관리자 토큰·기기 이름 → *Connect*. → [자세히](#3-브라우저마다-연결)
 
 그다음 한 번만: [내 복사본에 업데이트 워크플로 넣기](#서버-업데이트) — 이후 서버 업데이트는 버튼 한 번입니다.
@@ -91,9 +92,13 @@ pnpm run deploy
 
 ### 2. 확장 설치
 
-아직 브라우저 스토어에 없으므로 [Releases 페이지](https://github.com/xero0429/everyfold/releases/latest) 의 zip 으로 개발자 모드 설치를 합니다.
-
 **Chrome·Edge·Brave(Chromium 계열)**
+
+[Chrome 웹 스토어](https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd)에서 Everyfold 를 설치하고, 퍼즐 조각 메뉴에서 고정하면 아이콘이 툴바에 남습니다. 업데이트는 브라우저가 알아서 합니다. Edge 는 "다른 스토어의 확장 허용"을 물으면 허용합니다.
+
+릴리스 zip 으로 개발자 모드 설치를 해 쓰고 있었다면: 스토어판은 별개의 확장입니다. `chrome://extensions` 에서 압축해제 확장을 지운 뒤 스토어판을 다시 연결하세요(3단계).
+
+<details><summary>스토어 대신 릴리스 zip 으로 개발자 모드 설치</summary>
 
 1. 최신 릴리스에서 `everyfold-chrome-<버전>.zip` 을 받아 계속 둘 폴더(예: `~/Everyfold/chrome`)에 풉니다(지우면 안 됩니다 — 브라우저가 이 폴더에서 확장을 읽습니다).
 2. `chrome://extensions`(Edge: `edge://extensions`, Brave: `brave://extensions`)를 열고 **개발자 모드** 를 켭니다.
@@ -104,7 +109,11 @@ pnpm run deploy
 
 **업데이트:** 새 zip 을 받아 **같은 폴더에 덮어 풀고**, `chrome://extensions` 의 Everyfold 카드에서 새로고침 ↻ 을 누릅니다. 폴더 경로는 바꾸지 마세요. 압축해제 확장은 경로로 신원이 정해져서, 다른 폴더면 새 확장으로 보고 다시 연결해야 합니다.
 
+</details>
+
 **Firefox(140 이상)**
+
+Firefox 부가 기능에는 아직 없으므로 [Releases 페이지](https://github.com/xero0429/everyfold/releases/latest) 의 zip 을 씁니다.
 
 1. `everyfold-firefox-<버전>.zip` 을 받습니다.
 2. `about:debugging#/runtime/this-firefox` → **임시 부가 기능 로드…** → zip(또는 푼 폴더의 `manifest.json`)을 고릅니다.
@@ -259,7 +268,7 @@ Floccus 는 내가 고른 백엔드로 북마크를 동기화하지만 정리는
 
 - 폴더 안 형제 순서는 아직 동기화하지 않습니다(새 항목은 끝에 붙음).
 - 기본 카테고리 이름은 영어·한국어만 있습니다(위 *언어*). 이름은 마음대로 바꿔도 되고, 바꾼 이름도 동기화되며 분류는 바뀐 폴더로 계속 들어갑니다.
-- Safari 미지원. 스토어(Chrome 웹 스토어·AMO) 등록 전 — 릴리스 zip 으로 개발자 모드 설치하고, 업데이트는 직접 합니다(*확장 설치* 참조).
+- Safari 미지원. Firefox 는 부가 기능(AMO) 등록 전 — 릴리스 zip 을 임시 부가 기능으로 올리고, 업데이트는 직접 합니다(*확장 설치* 참조).
 - 첫 연결 뒤 각 브라우저에는 원래 북마크와 `Everyfold` 사본이 함께 있습니다(의도된 동작). 새 북마크는 *Move* 설정으로 복사 대신 옮길 수 있습니다.
 - 되돌리기·스냅샷·충돌 기록은 아직 화면이 없습니다(API 만).
 - 서버 업데이트는 업데이트 워크플로의 schedule 을 켜지 않는 한 자동이 아닙니다([서버 업데이트](#서버-업데이트)).

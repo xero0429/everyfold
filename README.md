@@ -12,6 +12,7 @@
   <a href="https://github.com/xero0429/everyfold/releases/latest"><img src="https://img.shields.io/github/v/release/xero0429/everyfold?label=release&color=3150d0" alt="Latest release"></a>
   <a href="https://github.com/xero0429/everyfold/actions/workflows/ci.yml"><img src="https://github.com/xero0429/everyfold/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd"><img src="https://img.shields.io/chrome-web-store/v/jkdaehjboglabiaebmpnkgecmkkihgbd?label=Chrome%20Web%20Store&logo=googlechrome&logoColor=white&color=4285F4" alt="Chrome Web Store"></a>
   <a href="#2-install-the-extension"><img src="https://img.shields.io/badge/Chrome%20%C2%B7%20Edge%20%C2%B7%20Brave-MV3-4285F4?logo=googlechrome&logoColor=white" alt="Chrome, Edge, Brave (Manifest V3)"></a>
   <a href="#2-install-the-extension"><img src="https://img.shields.io/badge/Firefox-140%2B%20(preview)-FF7139?logo=firefoxbrowser&logoColor=white" alt="Firefox 140+ (preview)"></a>
   <a href="#1-deploy-the-server"><img src="https://img.shields.io/badge/Cloudflare%20Workers-free%20plan-F38020?logo=cloudflare&logoColor=white" alt="Runs on the Cloudflare Workers free plan"></a>
@@ -58,7 +59,7 @@ There is no Everyfold account and no Everyfold-run server: **you deploy the serv
 ## Quick start
 
 1. **Deploy your server** — click [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/xero0429/everyfold) and set an `ADMIN_TOKEN` (`openssl rand -hex 32`). You get `https://everyfold.<your-subdomain>.workers.dev`. → [details](#1-deploy-the-server)
-2. **Install the extension** — download the Chrome or Firefox zip from the [latest release](https://github.com/xero0429/everyfold/releases/latest) and load it in developer mode (Chrome Web Store / Firefox Add-ons listings are not published yet). → [details](#2-install-the-extension)
+2. **Install the extension** — Chrome, Edge, Brave: from the [Chrome Web Store](https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd). Firefox: load the zip from the [latest release](https://github.com/xero0429/everyfold/releases/latest) as a temporary add-on (the Firefox Add-ons listing is not published yet). → [details](#2-install-the-extension)
 3. **Connect each browser** — click the Everyfold icon, paste the server URL and admin token, name the device, *Connect*. → [details](#3-connect-each-browser)
 
 Then, once: [add the update workflow to your copy](#updating-your-server) so future server updates are one click.
@@ -92,9 +93,13 @@ pnpm run deploy
 
 ### 2. Install the extension
 
-The extension is not in the browser stores yet, so you install it in developer mode from a zip on the [Releases page](https://github.com/xero0429/everyfold/releases/latest).
-
 **Chrome, Edge, Brave (any Chromium browser)**
+
+Install Everyfold from the [Chrome Web Store](https://chromewebstore.google.com/detail/everyfold/jkdaehjboglabiaebmpnkgecmkkihgbd) and pin it from the puzzle-piece menu so the icon stays in the toolbar. The browser keeps it up to date. In Edge, allow extensions from other stores when it asks.
+
+Already using a developer-mode copy from a release zip? The store version is a separate extension: remove the unpacked one in `chrome://extensions`, then connect the store version (step 3).
+
+<details><summary>Or install a release zip in developer mode</summary>
 
 1. Download `everyfold-chrome-<version>.zip` from the latest release and unzip it into a folder you will keep, e.g. `~/Everyfold/chrome` (don't delete it — the browser loads the extension from there).
 2. Open `chrome://extensions` (Edge: `edge://extensions`, Brave: `brave://extensions`) and turn on **Developer mode**.
@@ -105,7 +110,11 @@ Chrome may show a "developer mode extensions" notice at startup; that is expecte
 
 **Updating:** download the new zip and unzip it **over the same folder** (replace the files), then click the reload ↻ button on the Everyfold card in `chrome://extensions`. Keep the folder path the same: Chrome derives an unpacked extension's identity from its path, and a different folder counts as a new extension (you would have to connect it again).
 
+</details>
+
 **Firefox (140 or later)**
+
+Firefox Add-ons doesn't list Everyfold yet, so Firefox uses the zip from the [Releases page](https://github.com/xero0429/everyfold/releases/latest).
 
 1. Download `everyfold-firefox-<version>.zip`.
 2. Open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → pick the zip (or `manifest.json` inside the unzipped folder).
@@ -275,7 +284,7 @@ Yes; see the *Chrome account sync* note under [Install the extension](#2-install
 
 - Sibling order inside folders is not synced yet (new items are appended).
 - Default category names exist in English and Korean only (see *Language*). Rename them as you like — renames sync, and categorizing keeps using the renamed folder.
-- Safari is not supported. Store listings (Chrome Web Store, AMO) are not published yet: the extension is installed in developer mode from the release zips, and updating it is manual (see *Install the extension*).
+- Safari is not supported. Firefox is not on Firefox Add-ons (AMO) yet: it is installed from the release zip as a temporary add-on, and updating it is manual (see *Install the extension*).
 - After the first connect, each browser has both its original bookmarks and the `Everyfold` copy, by design. New bookmarks can be moved instead of copied with the *Move* setting.
 - Undo, snapshots and the conflict log have no UI yet (API only).
 - Server updates are not automatic unless you enable the schedule in the update workflow (see [Updating your server](#updating-your-server)).
