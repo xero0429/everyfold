@@ -7,6 +7,9 @@ permissions:
   contents: read
 jobs:
   check:
+    # Only in the upstream repository: the tests check the upstream wrangler.toml, which a server copy has rewritten
+    # (its own Worker name and D1 database), so they would always fail there. Pull requests run in the upstream repository.
+    if: github.repository == 'xero0429/everyfold'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
