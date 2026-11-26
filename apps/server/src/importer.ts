@@ -1,4 +1,4 @@
-import { clampTitle, flattenBookmarks, groupDuplicates, isImportableUrl, MAX_URL_LENGTH, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
+import { clampTitle, flattenBookmarks, SESSION_NAMES, SESSIONS_KEY, groupDuplicates, isImportableUrl, MAX_URL_LENGTH, parseImportFile, parseNetscapeHtml, type ImportFormat } from '@everyfold/core';
 import { Store, type NodeState } from './store.js';
 import { addNewCategorySuggestion, classifyWithContext } from './categorize.js';
 import type { Env } from './env.js';
@@ -56,7 +56,12 @@ export async function importItems(
   const mergedInFile = groups.reduce((n, g) => n + g.duplicates.length, 0);
 
   // 세션 폴더 안 북마크(저장한 탭)는 라이브러리 북마크가 아니다 — 같은 주소를 가져와도 "이미 있음" 으로 보지 않는다
-  const sessionIds = sessionFolderIds(await store.liveFolders());
+  const allFolders = await store.liveFolders();
+  const sessionIds = sessionFolderIds(allFolders);
+  // 세션 폴더 이름(기본 이름 두 언어 + 지금 세션 폴더의 실제 이름) — 가져오는 경로가 이 이름으로 시작하면 루트에 같은 이름 폴더를 또 만들지 않는다
+  const sessionNames = new Set(
+    [...Object.values(SESSION_NAMES).map((n) => n.folder), ...allFolders.filter((f) => f.cat_key === SESSIONS_KEY).map((f) => f.title)].map((n) => n.trim().toLowerCase()),
+  );
   const existing = new Set(
     (await store.db.prepare(`SELECT norm_url, parent_id FROM nodes WHERE kind='bookmark' AND deleted=0`).all<{ norm_url: string; parent_id: string | null }>()).results
       .filter((r) => !(r.parent_id && sessionIds.has(r.parent_id)))
@@ -103,12 +108,16 @@ export async function importItems(
     }
     return parent;
   };
-  /** 규칙·학습·LLM 이 못 정한 항목의 자리: 말단 폴더 이름이 기존 카테고리와 같으면 거기, 아니면 원본 경로 그대로, 경로가 없으면 미분류 */
+  /**
+   * 규칙·학습·LLM 이 못 정한 항목의 자리: 말단 폴더 이름이 기존 카테고리와 같으면 거기, 아니면 원본 경로 그대로, 경로가 없으면 미분류.
+   * 경로가 세션 폴더 이름으로 시작하면(다른 브라우저의 Everyfold/세션 을 내보낸 파일 등) 미분류 — 세션 폴더와 같은 이름의 일반 폴더를 만들지 않는다.
+   */
   const placeUnsorted = (path: readonly string[] | undefined): string | null => {
     const p = stripContainers(path ?? []);
     if (!p.length) return inboxId;
     const leaf = categoryByName.get(p[p.length - 1]!.trim().toLowerCase());
     if (leaf) return leaf;
+    if (sessionNames.has(p[0]!.trim().toLowerCase())) return inboxId;
     return ensurePath(p);
   };
 

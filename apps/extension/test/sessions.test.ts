@@ -250,3 +250,31 @@ describe('server compatibility', () => {
     expect(Object.values(e2.state.shadow).filter((x) => x.key === SESSIONS_KEY)).toHaveLength(1);
   });
 });
+
+describe('#3242 sessions folder moved under another folder', () => {
+  it('saving again puts the sessions folder back at the Everyfold root (server restores it) and the save succeeds on every browser', async () => {
+    await A.e.sync();
+    await B.e.sync();
+    const sf = A.bm.findFolder('세션', root(A))!;
+    const dev = A.bm.findFolder('개발', root(A))!;
+    const kept = (await A.e.listSessions()).length;
+    expect(kept).toBeGreaterThan(0);
+    // 사용자가 북마크 관리자에서 세션 폴더를 개발 아래로 끌어다 놓았다
+    await A.bm.move(sf, { parentId: dev });
+    await A.e.sync();
+    await B.e.sync();
+    expect(B.bm.dump(root(B))).toContain('/개발/세션/');
+    expect(await A.e.listSessions()).toEqual([]); // 루트에 없으니 확장은 못 찾는다 — 저장이 고친다
+
+    const r = await A.e.saveSession({ windows: [[{ url: 'https://example.com/after-move', title: 'after' }]], skipped: 0, tabs: 1 }, { locale: 'ko', at: new Date(2026, 10, 27, 8, 0) });
+    expect(r).toMatchObject({ windows: 1, tabs: 1 });
+    expect(A.bm.dump(root(A))).toContain(`/세션/${r.title}/창 1/after|https://example.com/after-move`);
+    expect(A.bm.dump(root(A)).some((l) => l.startsWith('/개발/세션'))).toBe(false);
+    expect(A.bm.findFolder('세션', root(A))).toBe(sf); // 같은 폴더가 돌아왔다(새로 만들지 않음)
+    expect((await A.e.listSessions()).length).toBe(kept + 1);
+    await B.e.sync();
+    expect(B.bm.dump(root(B)).some((l) => l.startsWith('/개발/세션'))).toBe(false);
+    expect(B.bm.dump(root(B))).toEqual(A.bm.dump(root(A)));
+    expect((await B.e.listSessions()).length).toBe(kept + 1);
+  });
+});

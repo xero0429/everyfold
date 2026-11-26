@@ -267,6 +267,11 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
           let existing: NodeRow | undefined;
           for (const r of rows.values()) if (r.kind === 'folder' && !r.deleted && r.cat_key === SESSIONS_KEY) existing = existing && existing.created_at <= r.created_at ? existing : r;
           if (existing) {
+            // 사용자가 세션 폴더를 다른 폴더 아래로 옮겨 두었으면 루트로 되돌린다 — 이동 기록(rev)이 남아 모든 기기가 다음 pull 에서 루트로 옮겨 받는다
+            if (existing.parent_id !== null) {
+              const prev = rowToState(existing);
+              write({ ...prev, parentId: null, position: posFor(null) }, 'move', prev);
+            }
             remember(op.clientRef, existing.id);
             results.push({ index, status: 'merged', serverId: existing.id, rev: existing.rev, reason: 'reserved folder exists', _node: existing.id });
             continue;
@@ -402,8 +407,8 @@ export async function push(store: Store, env: Env, deviceId: string, req: PushRe
       if ('position' in d.apply) after.position = Number(d.apply.position);
       if ('parentId' in d.apply && 'position' in wanted === false) after.position = posFor(after.parentId);
       write(after, op.op, before);
-      // 학습: 사용자가 북마크를 다른 카테고리(폴더)로 옮겼다
-      if (row.kind === 'bookmark' && 'parentId' in d.apply && after.parentId && row.url) {
+      // 학습: 사용자가 북마크를 다른 카테고리(폴더)로 옮겼다 — 세션 폴더 안은 카테고리가 아니라 적지 않는다
+      if (row.kind === 'bookmark' && 'parentId' in d.apply && after.parentId && row.url && !inSessions(after.parentId)) {
         stmts.push(db.prepare(`INSERT INTO moves (url, to_category_id, at) VALUES (?, ?, ?)`).bind(row.url, after.parentId, now));
       }
       results.push(d.conflict ? { index, status: 'conflict', serverId: row.id, serverWon: d.serverWon, _node: row.id } : { index, status: 'applied', serverId: row.id, _node: row.id });
