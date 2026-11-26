@@ -1,6 +1,6 @@
 # Chrome Web Store listing
 
-> 0.1.3 submitted 2026-11-26 (in review; 0.1.2 stays published until it passes — auto-publish on pass is on). Listing `jkdaehjboglabiaebmpnkgecmkkihgbd`. This file is the text that was submitted for 0.1.3 (adds *Save open windows* and the optional `tabs` permission); reuse it for the next update. Submitting is done in the developer dashboard.
+> 0.1.3 published (submitted 2026-11-26, passed review and auto-published by 2026-11-27). Listing `jkdaehjboglabiaebmpnkgecmkkihgbd`. This file is the text that was submitted for 0.1.3 (adds *Save open windows* and the optional `tabs` permission); reuse it for the next update. Submitting is done in the developer dashboard.
 
 Package: `pnpm package:chrome` → `apps/extension/dist/store/everyfold-chrome-<version>.zip` (manifest at the zip root, `_locales/en` + `_locales/ko` inside).
 Screenshots: `pnpm --filter @everyfold/extension store-shots` → `apps/extension/dist/store/screenshots/` (1280×800; light set committed in `docs/store/screenshots/`).
@@ -112,7 +112,7 @@ Reviewers need a server to connect to. Before submitting, the owner deploys a th
 Server is deleted after review.
 ```
 
-Delete that Worker (or rotate `ADMIN_TOKEN`) once the review is done. Keep it for later updates too: every new version is reviewed again.
+Delete that Worker (or rotate `ADMIN_TOKEN`) once the review is done. Keep it for later updates too: every new version is reviewed again. After 0.1.3 passed (2026-11-27) the Worker and D1 were kept and `ADMIN_TOKEN` was rotated; the next submission needs a fresh token in the Password field.
 
 ## Distribution tab
 
