@@ -285,7 +285,7 @@ Yes; see the *Chrome account sync* note under [Install the extension](#2-install
 ## Known limitations
 
 - Sibling order inside folders is not synced yet (new items are appended).
-- *Save open windows* restores page addresses only — not tab history, pinned tabs, tab groups or window positions. Window folder names (`Window 1`) follow the browser's language; the `Sessions` folder name follows the server's category language.
+- *Save open windows* restores page addresses only — not tab history, pinned tabs, tab groups or window positions. Window folder names (`Window 1`) follow the browser's language; the `Sessions` folder name follows the server's category language. Keep `Sessions` directly under `Everyfold`: if you drag it into another folder, it moves back the next time you save windows (saved windows are kept). Importing a bookmarks file never creates a second `Sessions` folder — anything under a folder of that name goes to the unsorted folder.
 - Default category names exist in English and Korean only (see *Language*). Rename them as you like — renames sync, and categorizing keeps using the renamed folder.
 - Safari is not supported. Firefox is not on Firefox Add-ons (AMO) yet: it is installed from the release zip as a temporary add-on, and updating it is manual (see *Install the extension*).
 - After the first connect, each browser has both its original bookmarks and the `Everyfold` copy, by design. New bookmarks can be moved instead of copied with the *Move* setting.
